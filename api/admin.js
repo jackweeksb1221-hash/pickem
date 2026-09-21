@@ -4,7 +4,7 @@ const L = require('./_lib');
 
 module.exports = async (req, res) => {
   try {
-    const { password, action, week, from, to, amount, dweek, id, player, handle } = req.body || {};
+    const { password, action, week, from, to, amount, dweek, id, player, handle, pin } = req.body || {};
     if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD)
       return res.status(401).json({ error: 'Wrong admin password.' });
     const n = Number(week) || L.currentWeek();
@@ -47,6 +47,22 @@ module.exports = async (req, res) => {
       if (h && !/^[A-Za-z0-9_-]{2,30}$/.test(h)) return res.status(400).json({ error: 'Venmo handles use only letters, numbers, - and _.' });
       if (h) await L.redis('HSET', 'venmo', player, JSON.stringify(h));
       else await L.redis('HDEL', 'venmo', player);
+    } else if (action === 'reset') {
+      // Wipe this week: lines, lock, pick window, everyone's picks and scores (money board is untouched)
+      await L.redis('DEL', ...['games', 'locked', 'window', 'picks', 'results', 'linesAt', 'scoresAt'].map(x => `week:${n}:${x}`));
+    } else if (action === 'pin') {
+      // Set a new PIN for a player
+      const raw = await L.redis('HGET', 'players', player || '');
+      if (!raw) return res.status(400).json({ error: 'Player not found.' });
+      if (!/^\d{4,8}$/.test(String(pin || ''))) return res.status(400).json({ error: 'PIN must be 4–8 digits.' });
+      const p = JSON.parse(raw), salt = L.crypto.randomBytes(8).toString('hex');
+      await L.redis('HSET', 'players', player, JSON.stringify({ ...p, salt, hash: L.hashPin(pin, salt) }));
+    } else if (action === 'removePlayer') {
+      // Remove a player, their Venmo and all their picks (money board entries stay as history)
+      if (!player) return res.status(400).json({ error: 'Pick a player.' });
+      const cmds = [['HDEL', 'players', player], ['HDEL', 'venmo', player]];
+      for (let w = 1; w <= L.currentWeek() + 1; w++) cmds.push(['HDEL', `week:${w}:picks`, player]);
+      await L.pipe(cmds);
     } else if (action !== 'status') {
       return res.status(400).json({ error: 'Unknown action.' });
     }
@@ -60,7 +76,7 @@ module.exports = async (req, res) => {
     res.json({
       week: n,
       games: gRaw ? JSON.parse(gRaw).length : 0,
-      finals: rRaw ? Object.keys(JSON.parse(rRaw)).length : 0,
+      finals: rRaw ? Object.values(JSON.parse(rRaw)).filter(r => r.final !== false).length : 0,
       linesAt, scoresAt, locked, window: win || 'notopen',
       quota: quota ? JSON.parse(quota) : null,
     });
