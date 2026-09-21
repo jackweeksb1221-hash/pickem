@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pick'em League</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page: #eef1f5; --slip: #ffffff; --ink: #13233f; --mute: #6b7788;
+    --rule: #d8dee7; --gold: #e3a008; --win: #178a4c; --loss: #c4222f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 15px/1.45 Inter, system-ui, -apple-system, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 0 14px 40px; }
+  header { background: var(--ink); color: #fff; padding: 18px 14px 14px; margin-bottom: 14px; }
+  header .in { max-width: 720px; margin: 0 auto; display: flex; justify-content: space-between; align-items: end; gap: 10px; }
+  h1, h2, .num { font-family: Oswald, Impact, sans-serif; letter-spacing: .01em; }
+  h1 { margin: 0; font-size: 28px; line-height: 1; }
+  h2 { margin: 0 0 10px; font-size: 20px; }
+  .weeknav { display: flex; align-items: center; gap: 6px; }
+  .weeknav b { font-family: Oswald, sans-serif; font-size: 18px; min-width: 84px; text-align: center; }
+  .weeknav button { background: rgba(255,255,255,.15); color: #fff; padding: 6px 12px; }
+  #dates { color: #b9c3d3; font-size: 12px; text-align: right; }
+  .slip { background: var(--slip); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .mute { color: var(--mute); font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row + .row { margin-top: 8px; }
+  input { flex: 1; min-width: 130px; padding: 10px; font-size: 16px; border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 10px 12px; cursor: pointer; background: #e4e9f0; color: var(--ink); }
+  button:disabled { opacity: .4; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+  .go { background: var(--ink); color: #fff; font-weight: 600; }
+  .game { padding: 12px 0; border-top: 1px dashed var(--rule); }
+  .game:first-of-type { border-top: 0; }
+  .teams { font-weight: 600; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0 6px; }
+  .opts button { font-family: Oswald, sans-serif; font-size: 16px; }
+  .opts button.on { background: var(--ink); color: #fff; }
+  .mults { display: flex; gap: 6px; }
+  .mults button { flex: 1; padding: 6px; font-weight: 600; }
+  .mults button.on { background: var(--gold); color: var(--ink); }
+  .save { position: sticky; bottom: 10px; width: 100%; padding: 14px; font-size: 16px; margin-top: 8px; box-shadow: 0 4px 14px rgba(19,35,63,.25); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 8px 6px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+  th { color: var(--mute); font-weight: 400; }
+  td.num { font-size: 17px; }
+  .scroll { overflow-x: auto; }
+  .win { color: var(--win); font-weight: 600; } .loss { color: var(--loss); font-weight: 600; }
+  #msg { min-height: 22px; font-size: 14px; margin-bottom: 6px; }
+  #msg.bad { color: var(--loss); }
+  footer { text-align: center; }
+  footer button { background: none; color: var(--mute); font-size: 13px; }
+  #admin { border: 2px solid var(--ink); }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .stat:last-of-type { border-bottom: 0; }
+  select { flex: 1; min-width: 120px; padding: 10px; font-size: 16px; border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); background: #fff; }
+  .sm { padding: 5px 8px; font-size: 13px; }
+  .paid td { color: var(--mute); text-decoration: line-through; }
+  .paid td.keep { text-decoration: none; }
+  a.venmo { color: #008cff; font-weight: 600; text-decoration: none; font-size: 13px; }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <div><h1>Pick'em</h1><div id="dates"></div></div>
+  <div class="weeknav"><button onclick="go(-1)" aria-label="Previous week">‹</button><b id="wk">Week</b><button onclick="go(1)" aria-label="Next week">›</button></div>
+</div></header>
+<main>
+  <div id="msg"></div>
+  <section class="slip" id="auth"></section>
+  <section class="slip" id="mypicks"></section>
+  <section class="slip"><h2>This week</h2><div id="weekboard"></div></section>
+  <section class="slip"><h2>Season standings</h2><div id="season"></div></section>
+  <section class="slip"><h2>Who owes who</h2><div class="scroll" id="money"></div></section>
+  <section class="slip"><h2>Who picked what</h2><div class="scroll" id="grid"></div></section>
+  <section class="slip" id="admin" hidden></section>
+  <footer><button onclick="toggleAdmin()">Admin</button></footer>
+</main>
+
+<script>
+let token = localStorage.getItem('token'), myName = localStorage.getItem('name');
+let week = null, D = null, draft = {};
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const short = t => esc(t.split(' ').slice(-1)[0]);
+const sgn = x => (x > 0 ? '+' : '') + x;
+const started = g => Date.parse(g.kickoff) <= Date.now();
+
+function msg(t, bad) { $('msg').textContent = t || ''; $('msg').className = bad ? 'bad' : 'mute'; }
+
+async function api(path, opts = {}) {
+  opts.headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) };
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({ error: 'Server error' }));
+  if (!r.ok) throw new Error(j.error || 'Request failed');
+  return j;
+}
+
+async function load(n) {
+  msg('Loading…');
+  try {
+    D = await api('/api/week' + (n ? '?week=' + n : ''));
+    week = D.week;
+    if (token && !D.myName) { clearLogin(); }
+    draft = JSON.parse(JSON.stringify((D.me && D.picks[D.me]) || {}));
+    render(); msg('');
+  } catch (e) { msg(e.message, true); }
+}
+async function go(d) { await load(Math.max(1, (week || 1) + d)); if (!$('admin').hidden && adminPw) adminCall('status'); }
+
+// Same scoring as the server: right = 1/2/3, wrong = 0/-1/-2
+function grade(g, res, p) {
+  const hs = res.home, as = res.away, m = p.mult || 1;
+  const win = p.pick === 'home' ? hs + g.spread > as
+            : p.pick === 'away' ? as - g.spread > hs
+            : p.pick === 'over' ? hs + as > g.total : hs + as < g.total;
+  return { win, pts: win ? m : (m === 1 ? 0 : m === 2 ? -1 : -2) };
+}
+function label(g, pick) {
+  return pick === 'home' ? short(g.home) + ' ' + sgn(g.spread)
+       : pick === 'away' ? short(g.away) + ' ' + sgn(-g.spread)
+       : pick === 'over' ? 'Over ' + g.total : 'Under ' + g.total;
+}
+
+function render() {
+  $('wk').textContent = 'Week ' + D.week;
+  const fmt = d => new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  $('dates').textContent = fmt(D.range[0]) + ' – ' + fmt(Date.parse(D.range[1]) - 1) + (D.week === D.currentWeek ? ' (this week)' : '');
+  renderAuth(); renderPicks();
+  $('weekboard').innerHTML = board(D.weekStandings);
+  $('season').innerHTML = board(D.season);
+  renderGrid(); renderMoney();
+}
+
+function renderAuth() {
+  if (token && myName) {
+    $('auth').innerHTML = `<div class="row" style="justify-content:space-between;align-items:center">
+      <div>Playing as <b>${esc(myName)}</b></div><button onclick="clearLogin();load(week)">Log out</button></div>`;
+    return;
+  }
+  $('auth').innerHTML = `<h2>Log in</h2>
+    <div class="row"><input id="nm" placeholder="Name" autocomplete="username">
+    <input id="pn" placeholder="PIN (4–8 digits)" inputmode="numeric" type="password" autocomplete="current-password"></div>
+    <div class="row"><input id="cd" placeholder="League code (only when joining)"></div>
+    <div class="row"><button class="go" onclick="auth('login')">Log in</button><button onclick="auth('register')">Join league</button></div>`;
+}
+async function auth(mode) {
+  try {
+    const j = await api('/api/login', { method: 'POST', body: JSON.stringify({ mode, name: $('nm').value, pin: $('pn').value, code: $('cd').value }) });
+    token = j.token; myName = j.name;
+    localStorage.setItem('token', token); localStorage.setItem('name', myName);
+    load(week);
+  } catch (e) { msg(e.message, true); }
+}
+function clearLogin() { token = null; myName = null; localStorage.removeItem('token'); localStorage.removeItem('name'); }
+
+function renderPicks() {
+  const el = $('mypicks'), open = D.window === 'open', canPick = !!D.me && open;
+  if (!D.games.length) { el.innerHTML = '<h2>Games</h2><div class="mute">Lines for this week aren\'t set yet. Check back once the admin locks them.</div>'; return; }
+  const banner = open ? '<b class="win">Picks are open.</b> Save before the admin closes picks. Games also lock at kickoff.'
+    : D.window === 'closed' ? '<b class="loss">Picks are closed.</b> Everyone\'s picks are shown below.'
+    : '<b>Picks aren\'t open yet.</b> Lines are set; the admin will open picks soon.';
+  let h = `<h2>${D.me ? 'My picks' : 'Games'}</h2><div style="margin-bottom:4px">${banner}</div>
+    <div class="mute">Pick a side or the over/under on each game. Use one 2x and one 3x a week.</div>`;
+  for (const g of D.games) {
+    const lock = started(g) || !canPick, p = draft[g.id], res = D.results[g.id];
+    const b = (pick, ok) => `<button ${lock || !ok ? 'disabled' : ''} class="${p && p.pick === pick ? 'on' : ''}"
+      onclick="choose('${g.id}','${pick}')">${ok ? label(g, pick) : '—'}</button>`;
+    let status = '';
+    if (res) {
+      status = ` · Final ${short(g.away)} ${res.away}, ${short(g.home)} ${res.home}`;
+      if (p && D.me) { const r = grade(g, res, p); status += ` · <span class="${r.win ? 'win' : 'loss'}">${r.win ? 'Won' : 'Lost'} ${sgn(r.pts)}</span>`; }
+    } else if (started(g)) status = ' · Kicked off';
+    const when = new Date(g.kickoff).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    h += `<div class="game"><div class="teams">${esc(g.away)} at ${esc(g.home)}</div>
+      <div class="mute">${when}${status}</div>
+      <div class="opts">${b('away', g.spread != null)}${b('home', g.spread != null)}${b('over', g.total != null)}${b('under', g.total != null)}</div>
+      ${D.me ? `<div class="mults">${[1, 2, 3].map(m => `<button ${lock || !p ? 'disabled' : ''}
+        class="${p && (p.mult || 1) === m ? 'on' : ''}" onclick="mult('${g.id}',${m})">${m}x</button>`).join('')}</div>` : ''}</div>`;
+  }
+  if (canPick && D.games.some(g => !started(g))) h += `<button class="go save" onclick="save()">Save picks</button>`;
+  el.innerHTML = h;
+}
+function choose(gid, pick) {
+  if (draft[gid] && draft[gid].pick === pick) delete draft[gid];
+  else draft[gid] = { pick, mult: (draft[gid] && draft[gid].mult) || 1 };
+  renderPicks();
+}
+function mult(gid, m) {
+  if (m > 1) for (const g of D.games) {
+    const p = draft[g.id];
+    if (g.id !== gid && p && p.mult === m) {
+      if (started(g)) { msg(`Your ${m}x is already locked on another game.`, true); return; }
+      p.mult = 1;
+    }
+  }
+  draft[gid].mult = m; renderPicks();
+}
+async function save() {
+  try { await api('/api/picks', { method: 'POST', body: JSON.stringify({ week, picks: draft }) }); await load(week); msg('Picks saved.'); }
+  catch (e) { msg(e.message, true); }
+}
+
+function board(rows) {
+  if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
+  return `<table><tr><th>#</th><th>Player</th><th>Right–wrong</th><th>Points</th></tr>` +
+    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td>${r.correct}–${r.wrong}</td><td class="num">${r.points}</td></tr>`).join('') + '</table>';
+}
+
+function renderGrid() {
+  const ps = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]));
+  if (!D.games.length || !ps.length) { $('grid').innerHTML = '<div class="mute">Nothing to show yet.</div>'; return; }
+  let h = `<table><tr><th>Game</th>${ps.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr>`;
+  for (const g of D.games) {
+    h += `<tr><td>${short(g.away)} at ${short(g.home)}</td>`;
+    for (const [k] of ps) {
+      const p = (D.picks[k] || {})[g.id]; let c = '–', cls = 'mute';
+      if (p && p.hidden) c = '🔒';
+      else if (p) {
+        c = label(g, p.pick) + (p.mult > 1 ? ` <b>${p.mult}x</b>` : ''); cls = '';
+        const res = D.results[g.id];
+        if (res) cls = grade(g, res, p).win ? 'win' : 'loss';
+      }
+      h += `<td class="${cls}">${c}</td>`;
+    }
+    h += '</tr>';
+  }
+  $('grid').innerHTML = h + '</table><div class="mute" style="margin-top:6px">🔒 means they picked; it shows when picks close or at kickoff.</div>';
+}
+
+// ---------- Money board ----------
+const usd = x => '$' + Number(x).toFixed(2);
+const venmo = k => (D.venmo || {})[k] ? `<a class="venmo" href="https://venmo.com/u/${encodeURIComponent(D.venmo[k])}" target="_blank" rel="noopener">@${esc(D.venmo[k])}</a>` : '';
+function venmoList() {
+  const ps = Object.entries(D.players).filter(([k]) => (D.venmo || {})[k]).sort((a, b) => a[1].localeCompare(b[1]));
+  return ps.length ? `<h2 style="margin-top:18px">League Venmos</h2><table>` +
+    ps.map(([k, n]) => `<tr><td>${esc(n)}</td><td>${venmo(k)}</td></tr>`).join('') + '</table>' : '';
+}
+function renderMoney() {
+  const list = (D.debts || []).slice().sort((a, b) => a.paid - b.paid || b.week - a.week);
+  if (!list.length) { $('money').innerHTML = '<div class="mute">Nothing owed yet.</div>' + venmoList(); return; }
+  const nm = k => esc(D.players[k] || k);
+  const bal = {};
+  for (const d of list) if (!d.paid) { bal[d.from] = (bal[d.from] || 0) - d.amount; bal[d.to] = (bal[d.to] || 0) + d.amount; }
+  const people = Object.entries(bal).filter(([, v]) => Math.abs(v) > 0.001).sort((a, b) => a[1] - b[1]);
+  let h = people.length ? `<table style="margin-bottom:14px"><tr><th>Player</th><th>Still owes / is owed</th></tr>` +
+    people.map(([k, v]) => `<tr><td>${nm(k)}</td><td class="${v < 0 ? 'loss' : 'win'}">${v < 0 ? 'Owes ' + usd(-v) : 'Is owed ' + usd(v) + ' ' + venmo(k)}</td></tr>`).join('') + '</table>'
+    : '<div class="win" style="margin-bottom:10px">Everyone is paid up.</div>';
+  h += `<table><tr><th>Wk</th><th>Who owes</th><th>To</th><th>Amount</th><th>Status</th>${isAdmin ? '<th></th>' : ''}</tr>`;
+  for (const d of list) {
+    h += `<tr class="${d.paid ? 'paid' : ''}"><td>${d.week}</td><td>${nm(d.from)}</td><td>${nm(d.to)}${d.paid ? '' : ' ' + venmo(d.to)}</td><td>${usd(d.amount)}</td>
+      <td class="keep ${d.paid ? 'win' : 'loss'}">${d.paid ? 'Paid' : 'Unpaid'}</td>
+      ${isAdmin ? `<td class="keep"><button class="sm" onclick="adminCall('debtPaid',{id:'${d.id}'})">${d.paid ? 'Undo' : 'Mark paid'}</button>
+      <button class="sm" onclick="if(confirm('Delete this entry?'))adminCall('debtDelete',{id:'${d.id}'})">Delete</button></td>` : ''}</tr>`;
+  }
+  $('money').innerHTML = h + '</table>' + venmoList();
+}
+function addDebt() {
+  adminCall('debtAdd', { from: $('dfrom').value, to: $('dto').value, amount: $('damt').value, dweek: $('dwk').value });
+}
+
+// ---------- Admin panel: the only place the Odds API gets called ----------
+let adminPw = sessionStorage.getItem('adminPw'), isAdmin = false, lastStatus = null;
+function adminLock() { adminPw = null; isAdmin = false; sessionStorage.removeItem('adminPw'); renderAdminLogin(); renderMoney(); }
+function toggleAdmin() {
+  const el = $('admin'); el.hidden = !el.hidden;
+  if (!el.hidden) { adminPw ? adminCall('status') : renderAdminLogin(); el.scrollIntoView({ behavior: 'smooth' }); }
+}
+function renderAdminLogin(err) {
+  $('admin').innerHTML = `<h2>Admin</h2>
+    <div class="row"><input id="apw" type="password" placeholder="Admin password"><button class="go" onclick="adminLogin()">Unlock</button></div>
+    ${err ? `<div class="loss" style="margin-top:8px">${esc(err)}</div>` : ''}`;
+}
+function adminLogin() { adminPw = $('apw').value; adminCall('status'); }
+async function adminCall(action, extra = {}) {
+  const btns = $('admin').querySelectorAll('button'); btns.forEach(b => b.disabled = true);
+  try {
+    const j = await api('/api/admin', { method: 'POST', body: JSON.stringify({ password: adminPw, action, week, ...extra }) });
+    sessionStorage.setItem('adminPw', adminPw); isAdmin = true; lastStatus = j;
+    if (action !== 'status') await load(week);
+    renderAdmin(j, { lines: 'Lines refreshed.', lock: 'Lines locked.', open: 'Picks opened.', close: 'Picks closed.',
+      scores: 'Scores refreshed.', debtAdd: 'Added to who owes who.', debtPaid: 'Payment updated.', debtDelete: 'Entry deleted.', venmo: 'Venmo saved.' }[action] || '');
+    renderMoney();
+  } catch (e) {
+    if (/password/i.test(e.message)) { adminLock(); renderAdminLogin(e.message); }
+    else if (lastStatus) renderAdmin(lastStatus, e.message, true);
+    else { renderAdminLogin(); $('admin').insertAdjacentHTML('beforeend', `<div class="loss">${esc(e.message)}</div>`); }
+  }
+}
+function renderAdmin(j, note, bad) {
+  const opts = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
+  const t = x => x ? new Date(x).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Never';
+  const win = { open: '<span class="win">Open</span>', closed: '<span class="loss">Closed</span>', notopen: 'Not opened' }[j.window];
+  const btn = (action, text, ok, confirmText) => `<button class="go" ${ok ? '' : 'disabled'}
+    onclick="${confirmText ? `if(confirm('${confirmText}'))` : ''}adminCall('${action}')">${text}</button>`;
+  $('admin').innerHTML = `<h2>Admin · Week ${j.week}</h2>
+    <div class="mute" style="margin-bottom:8px">Use the arrows at the top to pick a week. Buttons marked * use about 2 API credits.</div>
+    <div class="stat"><span>Games saved</span><b>${j.games}</b></div>
+    <div class="stat"><span>Lines</span><b>${j.locked ? 'Locked ' + t(j.locked) : 'Not locked (last pulled ' + t(j.linesAt) + ')'}</b></div>
+    <div class="stat"><span>Pick window</span><b>${win}</b></div>
+    <div class="stat"><span>Finals recorded</span><b>${j.finals} of ${j.games}</b></div>
+    <div class="stat"><span>Scores last refreshed</span><b>${t(j.scoresAt)}</b></div>
+    <div class="stat"><span>API credits left</span><b>${j.quota ? j.quota.remaining : 'Unknown until first refresh'}</b></div>
+    <div class="row" style="margin-top:12px">
+      ${btn('lines', 'Refresh lines *', !j.locked)}
+      ${btn('lock', 'Lock lines', !j.locked && j.games > 0, 'Lock these lines for the whole week? This cannot be undone.')}
+    </div>
+    <div class="row">
+      ${btn('open', 'Open picks', j.locked && j.window !== 'open')}
+      ${btn('close', 'Close picks', j.window === 'open')}
+    </div>
+    <div class="row">
+      ${btn('scores', 'Refresh scores *', j.games > 0)}
+      <button onclick="adminLock()">Lock admin</button>
+    </div>
+    <div class="mute" style="margin-top:8px">Order each week: refresh lines, lock lines, open picks, close picks, refresh scores.
+    Players can't see lines until you lock them. Scores are only available for 3 days after a game.</div>
+    <h2 style="margin-top:18px">Add who owes who</h2>
+    ${Object.keys(D.players).length < 2 ? '<div class="mute">You need at least 2 players in the league.</div>' : `
+    <div class="row"><select id="dfrom" aria-label="Who owes"><option value="">Who owes…</option>${opts}</select>
+      <select id="dto" aria-label="Owed to"><option value="">Owes to…</option>${opts}</select></div>
+    <div class="row"><input id="damt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount ($)">
+      <input id="dwk" type="number" min="1" value="${j.week}" aria-label="Week" style="max-width:90px">
+      <button class="go" onclick="addDebt()">Add</button></div>
+    <div class="mute" style="margin-top:6px">Mark payments paid or delete entries in the Who owes who section above.</div>`}
+    <h2 style="margin-top:18px">Venmo handles</h2>
+    ${Object.keys(D.players).length ? `
+    <div class="row"><select id="vplayer" aria-label="Player" onchange="$('vhandle').value=(D.venmo||{})[this.value]||''"><option value="">Player…</option>${opts}</select>
+      <input id="vhandle" placeholder="@venmo-handle" autocapitalize="off" autocorrect="off"></div>
+    <div class="row"><button class="go" onclick="adminCall('venmo',{player:$('vplayer').value,handle:$('vhandle').value})">Save Venmo</button></div>
+    <div class="mute" style="margin-top:6px">Leave the box empty and save to remove a handle.</div>` : '<div class="mute">No players yet.</div>'}
+    ${note ? `<div class="${bad ? 'loss' : 'win'}" style="margin-top:8px">${esc(note)}</div>` : ''}`;
+}
+
+load();
+</script>
+</body>
+</html>
