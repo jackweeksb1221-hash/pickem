@@ -117,11 +117,12 @@ async function gradeWeeks(weeks) {
     let changed = false;
     for (const g of games) {
       const s = byId[g.id];
-      if (!s || !s.completed || !s.scores) continue;
+      if (!s || !s.scores) continue;
+      if (results[g.id] && results[g.id].final !== false) continue; // already final
       const h = s.scores.find(x => x.name === g.home), a = s.scores.find(x => x.name === g.away);
       if (!h || !a) continue;
-      results[g.id] = { home: Number(h.score), away: Number(a.score) };
-      changed = true; count++;
+      results[g.id] = { home: Number(h.score), away: Number(a.score), final: !!s.completed };
+      changed = true; if (s.completed) count++;
     }
     if (changed) await redis('SET', `week:${n}:results`, JSON.stringify(results));
   }
@@ -140,14 +141,15 @@ function gradePick(g, res, p) {
   const m = p.mult || 1;
   return { win, pts: win ? m : (m === 1 ? 0 : m === 2 ? -1 : -2) };
 }
-function tally(games, picks, results, names, into = {}) {
-  for (const k of Object.keys(names)) into[k] = into[k] || { name: names[k], correct: 0, wrong: 0, points: 0 };
+// Official points only count FINAL games. includeLive also counts games in progress ("if it ended now").
+function tally(games, picks, results, names, into = {}, includeLive = false) {
+  for (const k of Object.keys(names)) into[k] = into[k] || { key: k, name: names[k], correct: 0, wrong: 0, points: 0 };
   const byId = Object.fromEntries(games.map(g => [g.id, g]));
   for (const [k, pk] of Object.entries(picks)) {
     if (!into[k]) continue;
     for (const [gid, p] of Object.entries(pk)) {
       const g = byId[gid], r = results[gid];
-      if (!g || !r) continue;
+      if (!g || !r || (r.final === false && !includeLive)) continue;
       const x = gradePick(g, r, p);
       x.win ? into[k].correct++ : into[k].wrong++;
       into[k].points += x.pts;
