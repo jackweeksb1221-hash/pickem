@@ -60,6 +60,10 @@
   .sm { padding: 5px 8px; font-size: 13px; }
   .paid td { color: var(--mute); text-decoration: line-through; }
   .paid td.keep { text-decoration: none; }
+  .live { opacity: .65; font-style: italic; }
+  .danger { background: var(--loss); color: #fff; font-weight: 600; }
+  #weekboard tr.pick-row { cursor: pointer; }
+  #weekboard tr.pick-row:hover td, #weekboard tr.sel td { background: #f3f6fa; }
   a.venmo { color: #008cff; font-weight: 600; text-decoration: none; font-size: 13px; }
 </style>
 </head>
@@ -130,7 +134,7 @@ function render() {
   const fmt = d => new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' });
   $('dates').textContent = fmt(D.range[0]) + ' – ' + fmt(Date.parse(D.range[1]) - 1) + (D.week === D.currentWeek ? ' (this week)' : '');
   renderAuth(); renderPicks();
-  $('weekboard').innerHTML = board(D.weekStandings);
+  renderWeekBoard();
   $('season').innerHTML = board(D.season);
   renderGrid(); renderMoney();
 }
@@ -171,8 +175,9 @@ function renderPicks() {
       onclick="choose('${g.id}','${pick}')">${ok ? label(g, pick) : '—'}</button>`;
     let status = '';
     if (res) {
-      status = ` · Final ${short(g.away)} ${res.away}, ${short(g.home)} ${res.home}`;
-      if (p && D.me) { const r = grade(g, res, p); status += ` · <span class="${r.win ? 'win' : 'loss'}">${r.win ? 'Won' : 'Lost'} ${sgn(r.pts)}</span>`; }
+      const isLive = res.final === false;
+      status = ` · ${isLive ? 'Live' : 'Final'} ${short(g.away)} ${res.away}, ${short(g.home)} ${res.home}`;
+      if (p && D.me) { const r = grade(g, res, p); status += ` · <span class="${r.win ? 'win' : 'loss'} ${isLive ? 'live' : ''}">${isLive ? (r.win ? 'Winning' : 'Losing') : (r.win ? 'Won' : 'Lost')} ${sgn(r.pts)}</span>`; }
     } else if (started(g)) status = ' · Kicked off';
     const when = new Date(g.kickoff).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
     h += `<div class="game"><div class="teams">${esc(g.away)} at ${esc(g.home)}</div>
@@ -204,6 +209,39 @@ async function save() {
   catch (e) { msg(e.message, true); }
 }
 
+// Weekly board: official points (finals only) + live points (if games in progress ended now). Tap a player for details.
+let openPlayer = null;
+function renderWeekBoard() {
+  const rows = D.weekStandings;
+  if (!rows.length) { $('weekboard').innerHTML = '<div class="mute">No players yet. Share the link and have people join.</div>'; return; }
+  let h = `<table><tr><th>#</th><th>Player</th><th>Right–wrong</th><th>Points</th>${D.hasLive ? '<th>Live</th>' : ''}</tr>`;
+  rows.forEach((r, i) => {
+    h += `<tr class="pick-row ${openPlayer === r.key ? 'sel' : ''}" onclick="togglePlayer('${r.key}')"><td>${i + 1}</td><td>${esc(r.name)} ›</td>
+      <td>${r.correct}–${r.wrong}</td><td class="num">${r.points}</td>${D.hasLive ? `<td class="num live">${r.live}</td>` : ''}</tr>`;
+    if (openPlayer === r.key) h += `<tr><td colspan="${D.hasLive ? 5 : 4}" style="white-space:normal;background:#f8fafc">${playerDetail(r.key)}</td></tr>`;
+  });
+  $('weekboard').innerHTML = h + `</table><div class="mute" style="margin-top:6px">Tap a player to see their picks.${D.hasLive ? ' Live = points if games in progress ended right now.' : ''}</div>`;
+}
+function togglePlayer(k) { openPlayer = openPlayer === k ? null : k; renderWeekBoard(); }
+function playerDetail(k) {
+  const picks = D.picks[k] || {};
+  if (!D.games.length) return '<div class="mute">No games this week.</div>';
+  let h = '<table><tr><th>Game</th><th>Pick</th><th>Score</th><th>Result</th></tr>';
+  for (const g of D.games) {
+    const p = picks[g.id], res = D.results[g.id];
+    const score = res ? `${short(g.away)} ${res.away}–${res.home} ${short(g.home)}${res.final === false ? ' <span class="live">live</span>' : ''}` : '–';
+    let pick = '–', result = '<span class="mute">No pick</span>';
+    if (p && p.hidden) { pick = '🔒'; result = '<span class="mute">Hidden</span>'; }
+    else if (p) {
+      pick = label(g, p.pick) + (p.mult > 1 ? ` <b>${p.mult}x</b>` : '');
+      if (res) { const r = grade(g, res, p); result = `<span class="${r.win ? 'win' : 'loss'} ${res.final === false ? 'live' : ''}">${res.final === false ? (r.win ? 'Winning' : 'Losing') : (r.win ? 'Won' : 'Lost')} ${sgn(r.pts)}</span>`; }
+      else result = '<span class="mute">Pending</span>';
+    }
+    h += `<tr><td>${short(g.away)} at ${short(g.home)}</td><td>${pick}</td><td>${score}</td><td>${result}</td></tr>`;
+  }
+  return h + '</table>';
+}
+
 function board(rows) {
   if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
   return `<table><tr><th>#</th><th>Player</th><th>Right–wrong</th><th>Points</th></tr>` +
@@ -222,7 +260,7 @@ function renderGrid() {
       else if (p) {
         c = label(g, p.pick) + (p.mult > 1 ? ` <b>${p.mult}x</b>` : ''); cls = '';
         const res = D.results[g.id];
-        if (res) cls = grade(g, res, p).win ? 'win' : 'loss';
+        if (res) cls = (grade(g, res, p).win ? 'win' : 'loss') + (res.final === false ? ' live' : '');
       }
       h += `<td class="${cls}">${c}</td>`;
     }
@@ -282,7 +320,7 @@ async function adminCall(action, extra = {}) {
     sessionStorage.setItem('adminPw', adminPw); isAdmin = true; lastStatus = j;
     if (action !== 'status') await load(week);
     renderAdmin(j, { lines: 'Lines refreshed.', lock: 'Lines locked.', open: 'Picks opened.', close: 'Picks closed.',
-      scores: 'Scores refreshed.', debtAdd: 'Added to who owes who.', debtPaid: 'Payment updated.', debtDelete: 'Entry deleted.', venmo: 'Venmo saved.' }[action] || '');
+      scores: 'Scores refreshed.', debtAdd: 'Added to who owes who.', debtPaid: 'Payment updated.', debtDelete: 'Entry deleted.', venmo: 'Venmo saved.', reset: 'Week reset. Start again with Refresh lines.', pin: 'PIN changed.', removePlayer: 'Player removed.' }[action] || '');
     renderMoney();
   } catch (e) {
     if (/password/i.test(e.message)) { adminLock(); renderAdminLogin(e.message); }
@@ -302,7 +340,7 @@ function renderAdmin(j, note, bad) {
     <div class="stat"><span>Games saved</span><b>${j.games}</b></div>
     <div class="stat"><span>Lines</span><b>${j.locked ? 'Locked ' + t(j.locked) : 'Not locked (last pulled ' + t(j.linesAt) + ')'}</b></div>
     <div class="stat"><span>Pick window</span><b>${win}</b></div>
-    <div class="stat"><span>Finals recorded</span><b>${j.finals} of ${j.games}</b></div>
+    <div class="stat"><span>Final scores recorded</span><b>${j.finals} of ${j.games}</b></div>
     <div class="stat"><span>Scores last refreshed</span><b>${t(j.scoresAt)}</b></div>
     <div class="stat"><span>API credits left</span><b>${j.quota ? j.quota.remaining : 'Unknown until first refresh'}</b></div>
     <div class="row" style="margin-top:12px">
@@ -317,8 +355,12 @@ function renderAdmin(j, note, bad) {
       ${btn('scores', 'Refresh scores *', j.games > 0)}
       <button onclick="adminLock()">Lock admin</button>
     </div>
+    <div class="row">
+      <button class="danger" onclick="if(prompt('This erases Week ${j.week} lines, lock, pick window, everyone\'s picks and scores. Type RESET to confirm.')==='RESET')adminCall('reset')">Reset week ${j.week}</button>
+    </div>
     <div class="mute" style="margin-top:8px">Order each week: refresh lines, lock lines, open picks, close picks, refresh scores.
-    Players can't see lines until you lock them. Scores are only available for 3 days after a game.</div>
+    Players can't see lines until you lock them. Refresh scores during games for live scores, and after games for finals (within 3 days).
+    Reset week wipes that week so you can start it over; the money board is not affected.</div>
     <h2 style="margin-top:18px">Add who owes who</h2>
     ${Object.keys(D.players).length < 2 ? '<div class="mute">You need at least 2 players in the league.</div>' : `
     <div class="row"><select id="dfrom" aria-label="Who owes"><option value="">Who owes…</option>${opts}</select>
@@ -333,7 +375,30 @@ function renderAdmin(j, note, bad) {
       <input id="vhandle" placeholder="@venmo-handle" autocapitalize="off" autocorrect="off"></div>
     <div class="row"><button class="go" onclick="adminCall('venmo',{player:$('vplayer').value,handle:$('vhandle').value})">Save Venmo</button></div>
     <div class="mute" style="margin-top:6px">Leave the box empty and save to remove a handle.</div>` : '<div class="mute">No players yet.</div>'}
+    <h2 style="margin-top:18px">Players</h2>
+    ${playerAdmin()}
     ${note ? `<div class="${bad ? 'loss' : 'win'}" style="margin-top:8px">${esc(note)}</div>` : ''}`;
+}
+// Player list for the admin: season points, Venmo, change PIN, remove
+function playerAdmin() {
+  const ps = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]));
+  if (!ps.length) return '<div class="mute">No players yet.</div>';
+  const pts = Object.fromEntries((D.season || []).map(r => [r.key, r]));
+  return `<div class="scroll"><table><tr><th>Player</th><th>Season</th><th>Venmo</th><th></th></tr>` + ps.map(([k, n]) => {
+    const r = pts[k] || { points: 0, correct: 0, wrong: 0 };
+    return `<tr><td>${esc(n)}</td><td>${r.points} pts (${r.correct}–${r.wrong})</td><td>${venmo(k) || '<span class="mute">–</span>'}</td>
+      <td><button class="sm" onclick="changePin('${esc(k)}')">Change PIN</button>
+      <button class="sm danger" onclick="removePlayer('${esc(k)}')">Remove</button></td></tr>`;
+  }).join('') + `</table></div><div class="mute" style="margin-top:6px">Removing a player deletes their account, Venmo and all their picks. Who owes who entries stay.</div>`;
+}
+function changePin(k) {
+  const pin = prompt(`New PIN for ${D.players[k]} (4–8 digits):`);
+  if (pin !== null) adminCall('pin', { player: k, pin: pin.trim() });
+}
+function removePlayer(k) {
+  const n = D.players[k];
+  if (prompt(`This permanently removes ${n} and all their picks. Type their name to confirm:`)?.trim().toLowerCase() === n.toLowerCase())
+    adminCall('removePlayer', { player: k });
 }
 
 load();
