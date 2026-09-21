@@ -41,7 +41,11 @@ module.exports = async (req, res) => {
       week: n, currentWeek: cur, locked: !!locked, window: windowState, range: L.weekRange(n),
       me: names[me] ? me : null, myName: names[me] || null,
       games, results, picks: visible, players: names,
-      weekStandings: L.sortRows(L.tally(games, picks, results, names)),
+      weekStandings: (() => {
+        const live = L.tally(games, picks, results, names, {}, true);
+        return L.sortRows(L.tally(games, picks, results, names)).map(r => ({ ...r, live: live[r.key].points }));
+      })(),
+      hasLive: Object.values(results).some(r => r.final === false),
       season: L.sortRows(season),
       debts: debtsRaw ? JSON.parse(debtsRaw) : [],
       venmo: L.parseHash(venmoRaw),
