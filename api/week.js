@@ -6,12 +6,15 @@ module.exports = async (req, res) => {
     const n = parseInt(req.query.week) || cur;
     const me = L.whoAmI(req);
     const now = Date.now();
-    const [playersRaw, picksRaw, resultsRaw, locked, win, debtsRaw, venmoRaw] = await L.pipe([
+    const [playersRaw, picksRaw, resultsRaw, locked, win, debtsRaw, venmoRaw, manualRaw] = await L.pipe([
       ['HGETALL', 'players'], ['HGETALL', `week:${n}:picks`], ['GET', `week:${n}:results`],
-      ['GET', `week:${n}:locked`], ['GET', `week:${n}:window`], ['GET', 'debts'], ['HGETALL', 'venmo'],
+      ['GET', `week:${n}:locked`], ['GET', `week:${n}:window`], ['GET', 'debts'], ['HGETALL', 'venmo'], ['GET', `week:${n}:manual`],
     ]);
-    // Players only see lines after the admin locks them
-    const games = locked ? await L.getGames(n) : [];
+    // Players only see a game once its line is locked (older weeks: the whole week was locked at once)
+    const all = await L.getGames(n);
+    const legacy = !!locked && all.every(g => g.lineLocked === undefined);
+    const games = all.filter(g => g.lineLocked || legacy);
+    const manual = manualRaw ? JSON.parse(manualRaw) : {};
     const windowState = win || 'notopen';
     const results = resultsRaw ? JSON.parse(resultsRaw) : {};
 
@@ -30,20 +33,23 @@ module.exports = async (req, res) => {
     // Season totals
     const cmds = [];
     for (let w = 1; w <= cur; w++)
-      cmds.push(['GET', `week:${w}:games`], ['HGETALL', `week:${w}:picks`], ['GET', `week:${w}:results`]);
+      cmds.push(['GET', `week:${w}:games`], ['HGETALL', `week:${w}:picks`], ['GET', `week:${w}:results`], ['GET', `week:${w}:manual`]);
     const out = await L.pipe(cmds);
     const season = {};
     L.tally([], {}, {}, names, season);
-    for (let i = 0; i < out.length; i += 3)
+    for (let i = 0; i < out.length; i += 4) {
       L.tally(JSON.parse(out[i] || '[]'), L.parseHash(out[i + 1]), JSON.parse(out[i + 2] || '{}'), names, season);
+      L.addManual(JSON.parse(out[i + 3] || '{}'), season, names);
+    }
 
     res.json({
-      week: n, currentWeek: cur, locked: !!locked, window: windowState, range: L.weekRange(n),
+      week: n, currentWeek: cur, locked: games.length > 0, lockedGames: games.length, totalGames: all.length, window: windowState, range: L.weekRange(n),
       me: names[me] ? me : null, myName: names[me] || null,
       games, results, picks: visible, players: names,
       weekStandings: (() => {
-        const live = L.tally(games, picks, results, names, {}, true);
-        return L.sortRows(L.tally(games, picks, results, names)).map(r => ({ ...r, live: live[r.key].points }));
+        const live = L.addManual(manual, L.tally(games, picks, results, names, {}, true), names);
+        const off = L.addManual(manual, L.tally(games, picks, results, names), names);
+        return L.sortRows(off).map(r => ({ ...r, live: live[r.key].points }));
       })(),
       hasLive: Object.values(results).some(r => r.final === false),
       season: L.sortRows(season),
