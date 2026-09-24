@@ -157,6 +157,18 @@ function tally(games, picks, results, names, into = {}, includeLive = false) {
   }
   return into;
 }
+// Hand-entered results for weeks that were played before the site existed
+function addManual(manual, into, names) {
+  for (const [k, m] of Object.entries(manual || {})) {
+    if (!names[k]) continue;
+    into[k] = into[k] || { key: k, name: names[k], correct: 0, wrong: 0, points: 0 };
+    into[k].points += Number(m.points) || 0;
+    into[k].correct += Number(m.correct) || 0;
+    into[k].wrong += Number(m.wrong) || 0;
+    into[k].manual = true;
+  }
+  return into;
+}
 const sortRows = o => Object.values(o).sort((a, b) =>
   b.points - a.points || b.correct - a.correct || a.name.localeCompare(b.name));
 
@@ -175,5 +187,5 @@ function whoAmI(req) {
 
 module.exports = {
   crypto, redis, pipe, parseHash, currentWeek, weekRange, fetchLines, getGames,
-  gradeWeeks, gradePick, tally, sortRows, hashPin, sign, whoAmI,
+  gradeWeeks, gradePick, tally, addManual, sortRows, hashPin, sign, whoAmI,
 };
