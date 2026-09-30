@@ -80,4 +80,573 @@
   .opts button.on { background: var(--o); color: var(--ink); }
   .mults { display: flex; gap: 8px; }
   .mults button { flex: 1; padding: 8px; font-weight: 600; border: 1px solid transparent; }
-  .mults button.on { background: transparent; border-color: var(--
+  .mults button.on { background: transparent; border-color: var(--o); color: var(--o2); }
+  .save { position: sticky; bottom: calc(var(--tabs-h) + 22px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+          width: 100%; padding: 15px; font-size: 16px; margin-top: 10px; border-radius: 999px;
+          box-shadow: 0 6px 20px rgba(224,123,44,.35), 0 0 0 4px var(--card); }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  tr:last-child > td { border-bottom: 0; }
+  th { color: var(--dim); font-weight: 500; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  td.num { font: 400 24px/1 var(--serif); color: var(--text); font-variant-numeric: tabular-nums; }
+  #weekboard > table > tbody > tr.pick-row > td:first-child,
+  #season table td:first-child { font: 400 22px/1 var(--serif); color: var(--o2); width: 34px; }
+  .win { color: var(--win); font-weight: 600; } .loss { color: var(--loss); font-weight: 600; }
+  .live { opacity: .7; font-style: italic; }
+  #weekboard tr.pick-row { cursor: pointer; }
+  #weekboard tr.pick-row:hover td, #weekboard tr.sel td { background: var(--soft); }
+  td.detail { white-space: normal; padding: 4px 0 10px; }
+  td.detail > table { background: var(--soft); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  td.detail > table th, td.detail > table td { padding: 9px 10px; }
+  .detail-wrap { overflow-x: auto; max-width: min(652px, calc(100vw - 68px)); }
+  .paid td { color: var(--dim); text-decoration: line-through; }
+  .paid td.keep { text-decoration: none; }
+  a.venmo { color: var(--win); font-weight: 600; text-decoration: none; font-size: 13px; }
+
+  /* ---------- admin ---------- */
+  #admin h2:first-child::before { content: 'Commissioner'; display: block; font: 600 11px var(--sans);
+       letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+  .stat { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .stat:last-of-type { border-bottom: 0; }
+  .stat b { font-weight: 600; text-align: right; }
+  footer { text-align: center; padding: 4px 0 8px; }
+  footer button { background: none; color: var(--dim); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+
+  /* ---------- toast ---------- */
+  #msg { position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px)); z-index: 60;
+         max-width: calc(100% - 32px); padding: 10px 18px; border-radius: 999px;
+         background: var(--card); border: 2px solid var(--o); color: var(--text); font-size: 14px; font-weight: 500;
+         box-shadow: 0 8px 26px rgba(224,123,44,.28); text-align: center;
+         transform: translate(-50%, 0); transition: transform .38s var(--ease); pointer-events: none; }
+  #msg:empty { transform: translate(-50%, calc(-100% - 40px)); }
+  #msg.bad { border-color: var(--bad); color: var(--bad); }
+
+  /* ---------- tab bar ---------- */
+  .tabs { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
+          bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+          width: min(440px, calc(100% - 28px)); height: var(--tabs-h);
+          display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px;
+          background: var(--card); border: 0; border-radius: 999px;
+          box-shadow: 0 12px 32px rgba(224,123,44,.30), 0 2px 6px rgba(43,28,21,.08);
+          touch-action: none; user-select: none; -webkit-user-select: none; }
+  .tabs button { position: relative; z-index: 1; background: none; border-radius: 999px; padding: 0;
+                 color: var(--dim); font-weight: 600; font-size: 14px;
+                 transition: color .35s var(--glide), scale .35s var(--bounce); }
+  .tabs button:active { scale: .94; }
+  .tabs button.on { color: var(--ink); }
+  .thumb { position: absolute; z-index: 0; top: 6px; bottom: 6px; left: 6px; border-radius: 999px; background: var(--o);
+           box-shadow: 0 4px 14px rgba(224,123,44,.45), inset 0 1px 0 #f2a468;
+           will-change: transform; transform-origin: center;
+           transition: transform .62s var(--bounce), width .62s var(--bounce), scale .4s var(--bounce); }
+  .tabs.pressing .thumb { scale: 1.04 1.08; }
+  .dragging .panel, .dragging .viewport { transition-duration: 0s; }
+  .dragging .thumb { transition: transform 0s, width 0s, scale .4s var(--bounce); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel, .thumb, #msg, .tabs button, .viewport { transition-duration: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<header><div class="in">
+  <div><h1>Spread Em'</h1><div id="dates"></div></div>
+  <div class="weeknav"><button onclick="go(-1)" aria-label="Previous week">‹</button><b id="wk">Week</b><button onclick="go(1)" aria-label="Next week">›</button></div>
+</div></header>
+<div id="msg" role="status" aria-live="polite"></div>
+<main>
+  <div class="viewport"><div class="track" id="track">
+    <div class="panel" data-tab="picks">
+      <section class="slip" id="auth"></section>
+      <section class="slip" id="mypicks"></section>
+    </div>
+    <div class="panel" data-tab="standings">
+      <section class="slip"><h2>This week</h2><div id="weekboard"></div></section>
+      <section class="slip"><h2>Season standings</h2><div id="season"></div></section>
+    </div>
+    <div class="panel" data-tab="board">
+      <section class="slip"><h2>Who picked what</h2><div class="scroll" id="grid"></div></section>
+    </div>
+    <div class="panel" data-tab="money">
+      <section class="slip"><h2>Who owes who</h2><div class="scroll" id="money"></div></section>
+    </div>
+  </div></div>
+  <section class="slip" id="admin" hidden></section>
+  <footer><button onclick="toggleAdmin()">Admin</button></footer>
+</main>
+<nav class="tabs" id="tabs" aria-label="Sections">
+  <span class="thumb" id="thumb"></span>
+  <button data-i="0" class="on">Picks</button><button data-i="1">Standings</button><button data-i="2">Board</button><button data-i="3">Money</button>
+</nav>
+
+<script>
+let token = localStorage.getItem('token'), myName = localStorage.getItem('name');
+let week = null, D = null, draft = {};
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const short = t => esc(t.split(' ').slice(-1)[0]);
+const sgn = x => (x > 0 ? '+' : '') + x;
+const started = g => Date.parse(g.kickoff) <= Date.now();
+
+let msgTimer = null;
+function msg(t, bad) {
+  $('msg').textContent = t || ''; $('msg').className = bad ? 'bad' : 'mute';
+  clearTimeout(msgTimer);
+  if (t) msgTimer = setTimeout(() => { $('msg').textContent = ''; }, bad ? 5000 : 2600);
+}
+
+async function api(path, opts = {}) {
+  opts.headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) };
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({ error: 'Server error' }));
+  if (!r.ok) throw new Error(j.error || 'Request failed');
+  return j;
+}
+
+async function load(n) {
+  msg('Loading…');
+  try {
+    D = await api('/api/week' + (n ? '?week=' + n : ''));
+    week = D.week;
+    if (token && !D.myName) { clearLogin(); }
+    draft = JSON.parse(JSON.stringify((D.me && D.picks[D.me]) || {}));
+    render(); msg('');
+  } catch (e) { msg(e.message, true); }
+}
+async function go(d) { await load(Math.max(1, (week || 1) + d)); if (!$('admin').hidden && adminPw) adminCall('status'); }
+
+// Same scoring as the server: right = 1/2/3, wrong = 0/-1/-2
+function grade(g, res, p) {
+  const hs = res.home, as = res.away, m = p.mult || 1;
+  const win = p.pick === 'home' ? hs + g.spread > as
+            : p.pick === 'away' ? as - g.spread > hs
+            : p.pick === 'over' ? hs + as > g.total : hs + as < g.total;
+  return { win, pts: win ? m : (m === 1 ? 0 : m === 2 ? -1 : -2) };
+}
+function label(g, pick) {
+  return pick === 'home' ? short(g.home) + ' ' + sgn(g.spread)
+       : pick === 'away' ? short(g.away) + ' ' + sgn(-g.spread)
+       : pick === 'over' ? 'Over ' + g.total : 'Under ' + g.total;
+}
+
+function render() {
+  $('wk').textContent = 'Week ' + D.week;
+  const fmt = d => new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  $('dates').textContent = fmt(D.range[0]) + ' – ' + fmt(Date.parse(D.range[1]) - 1) + (D.week === D.currentWeek ? ' (this week)' : '');
+  renderAuth(); renderPicks();
+  renderWeekBoard();
+  $('season').innerHTML = seasonBoard(D.season);
+  renderGrid(); renderMoney();
+}
+
+function renderAuth() {
+  if (token && myName) {
+    $('auth').innerHTML = `<div class="row" style="justify-content:space-between;align-items:center">
+      <div>Playing as <b>${esc(myName)}</b></div><button onclick="clearLogin();load(week)">Log out</button></div>`;
+    return;
+  }
+  $('auth').innerHTML = `<h2>Log in</h2>
+    <div class="row"><input id="nm" placeholder="Name" autocomplete="username">
+    <input id="pn" placeholder="PIN (4–8 digits)" inputmode="numeric" type="password" autocomplete="current-password"></div>
+    <div class="row"><input id="cd" placeholder="League code (only when joining)"></div>
+    <div class="row"><button class="go" onclick="auth('login')">Log in</button><button onclick="auth('register')">Join league</button></div>`;
+}
+async function auth(mode) {
+  try {
+    const j = await api('/api/login', { method: 'POST', body: JSON.stringify({ mode, name: $('nm').value, pin: $('pn').value, code: $('cd').value }) });
+    token = j.token; myName = j.name;
+    localStorage.setItem('token', token); localStorage.setItem('name', myName);
+    load(week);
+  } catch (e) { msg(e.message, true); }
+}
+function clearLogin() { token = null; myName = null; localStorage.removeItem('token'); localStorage.removeItem('name'); }
+
+function renderPicks() {
+  const el = $('mypicks'), open = D.window === 'open', canPick = !!D.me && open;
+  if (!D.games.length) { el.innerHTML = '<h2>Games</h2><div class="mute">No locked lines yet this week. Games appear here as the admin locks them.</div>'; return; }
+  const banner = open ? '<b class="win">Picks are open.</b> Save before the admin closes picks. Games also lock at kickoff.'
+    : D.window === 'closed' ? '<b class="loss">Picks are closed.</b> Everyone\'s picks are shown below.'
+    : '<b>Picks aren\'t open yet.</b> The admin will open picks soon.';
+  let h = `<h2>${D.me ? 'My picks' : 'Games'}</h2><div style="margin-bottom:4px">${banner}</div>
+    <div class="mute">Pick a side or the over/under on each game. Use one 2x and one 3x a week.${D.totalGames > D.games.length ? ` ${D.totalGames - D.games.length} more game(s) get added when the admin locks them.` : ''}</div>`;
+  for (const g of D.games) {
+    const lock = started(g) || !canPick, p = draft[g.id], res = D.results[g.id];
+    const b = (pick, ok) => `<button ${lock || !ok ? 'disabled' : ''} class="${p && p.pick === pick ? 'on' : ''}"
+      onclick="choose('${g.id}','${pick}')">${ok ? label(g, pick) : '—'}</button>`;
+    let status = '';
+    if (res) {
+      const isLive = res.final === false;
+      status = ` · ${isLive ? 'Live' : 'Final'} ${short(g.away)} ${res.away}, ${short(g.home)} ${res.home}`;
+      if (p && D.me) { const r = grade(g, res, p); status += ` · <span class="${r.win ? 'win' : 'loss'} ${isLive ? 'live' : ''}">${isLive ? (r.win ? 'Winning' : 'Losing') : (r.win ? 'Won' : 'Lost')} ${sgn(r.pts)}</span>`; }
+    } else if (started(g)) status = ' · Kicked off';
+    const when = new Date(g.kickoff).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    h += `<div class="game"><div class="teams">${esc(g.away)} at ${esc(g.home)}</div>
+      <div class="mute">${when}${status}</div>
+      <div class="opts">${b('away', g.spread != null)}${b('home', g.spread != null)}${b('over', g.total != null)}${b('under', g.total != null)}</div>
+      ${D.me ? `<div class="mults">${[1, 2, 3].map(m => `<button ${lock || !p ? 'disabled' : ''}
+        class="${p && (p.mult || 1) === m ? 'on' : ''}" onclick="mult('${g.id}',${m})">${m}x</button>`).join('')}</div>` : ''}</div>`;
+  }
+  if (canPick && D.games.some(g => !started(g))) h += `<button class="go save" onclick="save()">Save picks</button>`;
+  el.innerHTML = h;
+}
+function choose(gid, pick) {
+  if (draft[gid] && draft[gid].pick === pick) delete draft[gid];
+  else draft[gid] = { pick, mult: (draft[gid] && draft[gid].mult) || 1 };
+  renderPicks();
+}
+function mult(gid, m) {
+  if (m > 1) for (const g of D.games) {
+    const p = draft[g.id];
+    if (g.id !== gid && p && p.mult === m) {
+      if (started(g)) { msg(`Your ${m}x is already locked on another game.`, true); return; }
+      p.mult = 1;
+    }
+  }
+  draft[gid].mult = m; renderPicks();
+}
+async function save() {
+  try { await api('/api/picks', { method: 'POST', body: JSON.stringify({ week, picks: draft }) }); await load(week); msg('Picks saved.'); }
+  catch (e) { msg(e.message, true); }
+}
+
+// Weekly board: official points (finals only) + live points (if games in progress ended now). Tap a player for details.
+let openPlayer = null;
+function renderWeekBoard() {
+  const rows = D.weekStandings;
+  if (!rows.length) { $('weekboard').innerHTML = '<div class="mute">No players yet. Share the link and have people join.</div>'; return; }
+  let h = `<table><tr><th>#</th><th>Player</th><th>Right–wrong</th><th>Points</th>${D.hasLive ? '<th>Live</th>' : ''}</tr>`;
+  rows.forEach((r, i) => {
+    h += `<tr class="pick-row ${openPlayer === r.key ? 'sel' : ''}" onclick="togglePlayer('${r.key}')"><td>${i + 1}</td><td>${esc(r.name)} ›</td>
+      <td>${r.correct}–${r.wrong}</td><td class="num">${r.points}</td>${D.hasLive ? `<td class="num live">${r.live}</td>` : ''}</tr>`;
+    if (openPlayer === r.key) h += `<tr><td class="detail" colspan="${D.hasLive ? 5 : 4}"><div class="detail-wrap">${playerDetail(r.key)}</div></td></tr>`;
+  });
+  $('weekboard').innerHTML = h + `</table><div class="mute" style="margin-top:6px">${D.manualWeek ? 'Results for this week were entered by the admin and replace the site\'s own scoring. ' : ''}Tap a player to see their picks.${D.hasLive ? ' Live = points if games in progress ended right now.' : ''}</div>`;
+}
+function togglePlayer(k) { openPlayer = openPlayer === k ? null : k; renderWeekBoard(); }
+function playerDetail(k) {
+  const picks = D.picks[k] || {};
+  if (!D.games.length) return '<div class="mute">No games this week.</div>';
+  let h = '<table><tr><th>Game</th><th>Pick</th><th>Score</th><th>Result</th></tr>';
+  for (const g of D.games) {
+    const p = picks[g.id], res = D.results[g.id];
+    const score = res ? `${short(g.away)} ${res.away}–${res.home} ${short(g.home)}${res.final === false ? ' <span class="live">live</span>' : ''}` : '–';
+    let pick = '–', result = '<span class="mute">No pick</span>';
+    if (p && p.hidden) { pick = '🔒'; result = '<span class="mute">Hidden</span>'; }
+    else if (p) {
+      pick = label(g, p.pick) + (p.mult > 1 ? ` <b>${p.mult}x</b>` : '');
+      if (res) { const r = grade(g, res, p); result = `<span class="${r.win ? 'win' : 'loss'} ${res.final === false ? 'live' : ''}">${res.final === false ? (r.win ? 'Winning' : 'Losing') : (r.win ? 'Won' : 'Lost')} ${sgn(r.pts)}</span>`; }
+      else result = '<span class="mute">Pending</span>';
+    }
+    h += `<tr><td>${short(g.away)} at ${short(g.home)}</td><td>${pick}</td><td>${score}</td><td>${result}</td></tr>`;
+  }
+  return h + '</table>';
+}
+
+// Season leaderboard: ranked by win % (right / total picks), points shown alongside
+const pctText = p => p == null ? '–' : (p * 100).toFixed(1) + '%';
+function seasonBoard(rows) {
+  if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
+  return `<div class="scroll"><table><tr><th>#</th><th>Player</th><th>Win %</th><th>Right–wrong</th><th>Points</th></tr>` +
+    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${pctText(r.pct)}</td><td>${r.correct}–${r.wrong}</td><td class="mute">${r.points}</td></tr>`).join('') +
+    '</table></div><div class="mute" style="margin-top:6px">Ranked by win % (right ÷ total picks). Ties go to points.</div>';
+}
+function board(rows) {
+  if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
+  return `<table><tr><th>#</th><th>Player</th><th>Right–wrong</th><th>Points</th></tr>` +
+    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td>${r.correct}–${r.wrong}</td><td class="num">${r.points}</td></tr>`).join('') + '</table>';
+}
+
+function renderGrid() {
+  const ps = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]));
+  if (!D.games.length || !ps.length) { $('grid').innerHTML = '<div class="mute">Nothing to show yet.</div>'; return; }
+  let h = `<table><tr><th>Game</th>${ps.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr>`;
+  for (const g of D.games) {
+    h += `<tr><td>${short(g.away)} at ${short(g.home)}</td>`;
+    for (const [k] of ps) {
+      const p = (D.picks[k] || {})[g.id]; let c = '–', cls = 'mute';
+      if (p && p.hidden) c = '🔒';
+      else if (p) {
+        c = label(g, p.pick) + (p.mult > 1 ? ` <b>${p.mult}x</b>` : ''); cls = '';
+        const res = D.results[g.id];
+        if (res) cls = (grade(g, res, p).win ? 'win' : 'loss') + (res.final === false ? ' live' : '');
+      }
+      h += `<td class="${cls}">${c}</td>`;
+    }
+    h += '</tr>';
+  }
+  $('grid').innerHTML = h + '</table><div class="mute" style="margin-top:6px">🔒 means they picked; it shows when picks close or at kickoff.</div>';
+}
+
+// ---------- Money board ----------
+const usd = x => '$' + Number(x).toFixed(2);
+const venmo = k => (D.venmo || {})[k] ? `<a class="venmo" href="https://venmo.com/u/${encodeURIComponent(D.venmo[k])}" target="_blank" rel="noopener">@${esc(D.venmo[k])}</a>` : '';
+function venmoList() {
+  const ps = Object.entries(D.players).filter(([k]) => (D.venmo || {})[k]).sort((a, b) => a[1].localeCompare(b[1]));
+  return ps.length ? `<h2 style="margin-top:18px">League Venmos</h2><table>` +
+    ps.map(([k, n]) => `<tr><td>${esc(n)}</td><td>${venmo(k)}</td></tr>`).join('') + '</table>' : '';
+}
+function renderMoney() {
+  const list = (D.debts || []).slice().sort((a, b) => a.paid - b.paid || b.week - a.week);
+  if (!list.length) { $('money').innerHTML = '<div class="mute">Nothing owed yet.</div>' + venmoList(); return; }
+  const nm = k => esc(D.players[k] || k);
+  const bal = {};
+  for (const d of list) if (!d.paid) { bal[d.from] = (bal[d.from] || 0) - d.amount; bal[d.to] = (bal[d.to] || 0) + d.amount; }
+  const people = Object.entries(bal).filter(([, v]) => Math.abs(v) > 0.001).sort((a, b) => a[1] - b[1]);
+  let h = people.length ? `<table style="margin-bottom:14px"><tr><th>Player</th><th>Still owes / is owed</th></tr>` +
+    people.map(([k, v]) => `<tr><td>${nm(k)}</td><td class="${v < 0 ? 'loss' : 'win'}">${v < 0 ? 'Owes ' + usd(-v) : 'Is owed ' + usd(v) + ' ' + venmo(k)}</td></tr>`).join('') + '</table>'
+    : '<div class="win" style="margin-bottom:10px">Everyone is paid up.</div>';
+  h += `<table><tr><th>Wk</th><th>Who owes</th><th>To</th><th>Amount</th><th>Status</th>${isAdmin ? '<th></th>' : ''}</tr>`;
+  for (const d of list) {
+    h += `<tr class="${d.paid ? 'paid' : ''}"><td>${d.week}</td><td>${nm(d.from)}</td><td>${nm(d.to)}${d.paid ? '' : ' ' + venmo(d.to)}</td><td>${usd(d.amount)}</td>
+      <td class="keep ${d.paid ? 'win' : 'loss'}">${d.paid ? 'Paid' : 'Unpaid'}</td>
+      ${isAdmin ? `<td class="keep"><button class="sm" onclick="adminCall('debtPaid',{id:'${d.id}'})">${d.paid ? 'Undo' : 'Mark paid'}</button>
+      <button class="sm" onclick="if(confirm('Delete this entry?'))adminCall('debtDelete',{id:'${d.id}'})">Delete</button></td>` : ''}</tr>`;
+  }
+  $('money').innerHTML = h + '</table>' + venmoList();
+}
+function addDebt() {
+  adminCall('debtAdd', { from: $('dfrom').value, to: $('dto').value, amount: $('damt').value, dweek: $('dwk').value });
+}
+
+// ---------- Admin panel: the only place the Odds API gets called ----------
+let adminPw = sessionStorage.getItem('adminPw'), isAdmin = false, lastStatus = null;
+function adminLock() { adminPw = null; isAdmin = false; sessionStorage.removeItem('adminPw'); renderAdminLogin(); renderMoney(); }
+function toggleAdmin() {
+  const el = $('admin'); el.hidden = !el.hidden;
+  if (!el.hidden) { adminPw ? adminCall('status') : renderAdminLogin(); el.scrollIntoView({ behavior: 'smooth' }); }
+}
+function renderAdminLogin(err) {
+  $('admin').innerHTML = `<h2>Admin</h2>
+    <div class="row"><input id="apw" type="password" placeholder="Admin password"><button class="go" onclick="adminLogin()">Unlock</button></div>
+    ${err ? `<div class="loss" style="margin-top:8px">${esc(err)}</div>` : ''}`;
+}
+function adminLogin() { adminPw = $('apw').value; adminCall('status'); }
+async function adminCall(action, extra = {}) {
+  const btns = $('admin').querySelectorAll('button'); btns.forEach(b => b.disabled = true);
+  try {
+    const j = await api('/api/admin', { method: 'POST', body: JSON.stringify({ password: adminPw, action, week, ...extra }) });
+    sessionStorage.setItem('adminPw', adminPw); isAdmin = true; lastStatus = j;
+    if (action !== 'status') await load(week);
+    renderAdmin(j, { lines: 'Lines refreshed.', lock: 'Lines locked.', open: 'Picks opened.', close: 'Picks closed.',
+      scores: 'Scores refreshed.', debtAdd: 'Added to who owes who.', debtPaid: 'Payment updated.', debtDelete: 'Entry deleted.', venmo: 'Venmo saved.', reset: 'Week reset. Start again with Refresh lines.', pin: 'PIN changed.', removePlayer: 'Player removed.', lockGames: 'Games locked.', manual: 'Week results saved.' }[action] || '');
+    renderMoney();
+  } catch (e) {
+    if (/password/i.test(e.message)) { adminLock(); renderAdminLogin(e.message); }
+    else if (lastStatus) renderAdmin(lastStatus, e.message, true);
+    else { renderAdminLogin(); $('admin').insertAdjacentHTML('beforeend', `<div class="loss">${esc(e.message)}</div>`); }
+  }
+}
+function renderAdmin(j, note, bad) {
+  const opts = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
+  const t = x => x ? new Date(x).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Never';
+  const win = { open: '<span class="win">Open</span>', closed: '<span class="loss">Closed</span>', notopen: 'Not opened' }[j.window];
+  const btn = (action, text, ok, confirmText) => `<button class="go" ${ok ? '' : 'disabled'}
+    onclick="${confirmText ? `if(confirm('${confirmText}'))` : ''}adminCall('${action}')">${text}</button>`;
+  $('admin').innerHTML = `<h2>Admin · Week ${j.week}</h2>
+    <div class="mute" style="margin-bottom:8px">Use the arrows at the top to pick a week. Buttons marked * use about 2 API credits.</div>
+    <div class="stat"><span>Games saved</span><b>${j.games}</b></div>
+    <div class="stat"><span>Lines locked</span><b>${j.lockedGames} of ${j.games} games</b></div>
+    <div class="stat"><span>Lines last pulled</span><b>${t(j.linesAt)}</b></div>
+    <div class="stat"><span>Pick window</span><b>${win}</b></div>
+    <div class="stat"><span>Final scores recorded</span><b>${j.finals} of ${j.games}</b></div>
+    <div class="stat"><span>Scores last refreshed</span><b>${t(j.scoresAt)}</b></div>
+    <div class="stat"><span>API credits left</span><b>${j.quota ? j.quota.remaining : 'Unknown until first refresh'}</b></div>
+    <div class="row" style="margin-top:12px">
+      ${btn('lines', 'Refresh lines *', true)}
+      ${btn('lock', 'Lock all games', j.lockedGames < j.games && j.games > 0, 'Lock every game for this week? Locking cannot be undone.')}
+    </div>
+    ${gameLocks(j)}
+    <div class="row">
+      ${btn('open', 'Open picks', j.locked && j.window !== 'open')}
+      ${btn('close', 'Close picks', j.window === 'open')}
+    </div>
+    <div class="row">
+      ${btn('scores', 'Refresh scores *', j.games > 0)}
+      <button onclick="adminLock()">Lock admin</button>
+    </div>
+    <div class="row">
+      <button class="danger" onclick="resetWeek(${j.week})">Reset week ${j.week}</button>
+    </div>
+    <div class="mute" style="margin-top:8px">Order each week: refresh lines, lock the games you want, open picks, close picks, refresh scores.
+    Players only see a game once its line is locked, and refreshing lines never changes a locked game.
+    Refresh scores during games for live scores, and after games for finals (within 3 days).
+    Reset week wipes that week so you can start it over; the money board is not affected.</div>
+    <h2 style="margin-top:18px">Add who owes who</h2>
+    ${Object.keys(D.players).length < 2 ? '<div class="mute">You need at least 2 players in the league.</div>' : `
+    <div class="row"><select id="dfrom" aria-label="Who owes"><option value="">Who owes…</option>${opts}</select>
+      <select id="dto" aria-label="Owed to"><option value="">Owes to…</option>${opts}</select></div>
+    <div class="row"><input id="damt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount ($)">
+      <input id="dwk" type="number" min="1" value="${j.week}" aria-label="Week" style="max-width:90px">
+      <button class="go" onclick="addDebt()">Add</button></div>
+    <div class="mute" style="margin-top:6px">Mark payments paid or delete entries in the Who owes who section above.</div>`}
+    <h2 style="margin-top:18px">Venmo handles</h2>
+    ${Object.keys(D.players).length ? `
+    <div class="row"><select id="vplayer" aria-label="Player" onchange="$('vhandle').value=(D.venmo||{})[this.value]||''"><option value="">Player…</option>${opts}</select>
+      <input id="vhandle" placeholder="@venmo-handle" autocapitalize="off" autocorrect="off"></div>
+    <div class="row"><button class="go" onclick="adminCall('venmo',{player:$('vplayer').value,handle:$('vhandle').value})">Save Venmo</button></div>
+    <div class="mute" style="margin-top:6px">Leave the box empty and save to remove a handle.</div>` : '<div class="mute">No players yet.</div>'}
+    <h2 style="margin-top:18px">Week ${j.week} results by hand</h2>
+    ${manualForm(j)}
+    <h2 style="margin-top:18px">Players</h2>
+    ${playerAdmin()}
+    ${note ? `<div class="${bad ? 'loss' : 'win'}" style="margin-top:8px">${esc(note)}</div>` : ''}`;
+}
+// Lock lines game by game, grouped by day (lock Thursday on Thursday, Sunday on Sunday...)
+function gameLocks(j) {
+  const games = j.gameList || [];
+  if (!games.length) return '<div class="mute" style="margin-top:8px">No games yet. Tap Refresh lines.</div>';
+  const days = {};
+  for (const g of games) {
+    const d = new Date(g.kickoff).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+    (days[d] = days[d] || []).push(g);
+  }
+  let h = '<div style="margin-top:10px">';
+  for (const [day, list] of Object.entries(days)) {
+    const openIds = list.filter(g => !g.lineLocked).map(g => g.id);
+    h += `<div class="stat" style="font-weight:600"><span>${esc(day)}</span>
+      ${openIds.length ? `<button class="sm go" onclick="lockIds(${JSON.stringify(openIds).replace(/"/g, '&quot;')})">Lock ${openIds.length} game${openIds.length > 1 ? 's' : ''}</button>`
+        : '<span class="win">All locked</span>'}</div>`;
+    for (const g of list) {
+      const time = new Date(g.kickoff).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      h += `<div class="stat"><span class="mute">${short(g.away)} at ${short(g.home)} · ${time}</span>
+        ${g.lineLocked ? '<span class="win">Locked</span>' : `<button class="sm" onclick="lockIds(['${g.id}'])">Lock</button>`}</div>`;
+    }
+  }
+  return h + '</div>';
+}
+function lockIds(ids) {
+  if (confirm(`Lock ${ids.length} game${ids.length > 1 ? 's' : ''}? Their lines cannot change after this.`)) adminCall('lockGames', { ids });
+}
+
+// Type in results for weeks played before the site existed
+function manualForm(j) {
+  const ps = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]));
+  if (!ps.length) return '<div class="mute">No players yet.</div>';
+  const m = j.manual || {};
+  let h = `<div class="mute" style="margin-bottom:8px">Type points, right and wrong for each player. Saving replaces everything the site scored this week, for the week and season totals. Leave a player blank for zero. Save with every box empty to go back to the site's own scoring.</div>
+    <div class="scroll"><table><tr><th>Player</th><th>Points</th><th>Right</th><th>Wrong</th></tr>`;
+  for (const [k, n] of ps) {
+    const v = m[k] || {};
+    h += `<tr><td>${esc(n)}</td>
+      <td><input id="mp-${esc(k)}" type="number" step="1" style="min-width:70px" value="${v.points ?? ''}"></td>
+      <td><input id="mc-${esc(k)}" type="number" min="0" step="1" style="min-width:70px" value="${v.correct ?? ''}"></td>
+      <td><input id="mw-${esc(k)}" type="number" min="0" step="1" style="min-width:70px" value="${v.wrong ?? ''}"></td></tr>`;
+  }
+  return h + `</table></div><div class="row"><button class="go" onclick="saveManual()">Save week ${j.week} results</button></div>`;
+}
+function saveManual() {
+  const entries = {};
+  for (const k of Object.keys(D.players))
+    entries[k] = { points: $('mp-' + k).value, correct: $('mc-' + k).value, wrong: $('mw-' + k).value };
+  adminCall('manual', { entries });
+}
+
+// Player list for the admin: season points, Venmo, change PIN, remove
+function playerAdmin() {
+  const ps = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]));
+  if (!ps.length) return '<div class="mute">No players yet.</div>';
+  const pts = Object.fromEntries((D.season || []).map(r => [r.key, r]));
+  return `<div class="scroll"><table><tr><th>Player</th><th>Season</th><th>Venmo</th><th></th></tr>` + ps.map(([k, n]) => {
+    const r = pts[k] || { points: 0, correct: 0, wrong: 0 };
+    return `<tr><td>${esc(n)}</td><td>${r.points} pts (${r.correct}–${r.wrong})</td><td>${venmo(k) || '<span class="mute">–</span>'}</td>
+      <td><button class="sm" onclick="changePin('${esc(k)}')">Change PIN</button>
+      <button class="sm danger" onclick="removePlayer('${esc(k)}')">Remove</button></td></tr>`;
+  }).join('') + `</table></div><div class="mute" style="margin-top:6px">Removing a player deletes their account, Venmo and all their picks. Who owes who entries stay.</div>`;
+}
+function resetWeek(n) {
+  const a = prompt(`This erases Week ${n} lines, lock, pick window, all picks and scores. Type RESET to confirm.`);
+  if (a && a.trim().toUpperCase() === 'RESET') adminCall('reset');
+}
+function changePin(k) {
+  const pin = prompt(`New PIN for ${D.players[k]} (4–8 digits):`);
+  if (pin !== null) adminCall('pin', { player: k, pin: pin.trim() });
+}
+function removePlayer(k) {
+  const n = D.players[k];
+  if (prompt(`This permanently removes ${n} and all their picks. Type their name to confirm:`)?.trim().toLowerCase() === n.toLowerCase())
+    adminCall('removePlayer', { player: k });
+}
+
+
+// ---------- Tabs: four panels side by side; drag across the tab bar to scrub between them ----------
+const TABS = { i: 0, n: 4 }, TAB_PAD = 6;
+function tabLayout(x) { // x = fractional panel index
+  const panels = document.querySelectorAll('.panel');
+  panels.forEach(p => { p.style.transform = `translateX(${-x * 100}%)`; });
+  const btns = [...document.querySelectorAll('#tabs button')];
+  const a = btns[Math.floor(x)], b = btns[Math.min(TABS.n - 1, Math.ceil(x))], f = x - Math.floor(x);
+  const bar = $('tabs').getBoundingClientRect(), ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+  const left = ra.left + (rb.left - ra.left) * f - bar.left - TAB_PAD, width = ra.width + (rb.width - ra.width) * f;
+  $('thumb').style.width = width + 'px';
+  $('thumb').style.transform = `translateX(${left}px)`;
+  const near = Math.round(x);
+  btns.forEach((btn, j) => btn.classList.toggle('on', j === near));
+  // hide off-screen panels from screen readers and keyboard focus
+  panels.forEach((p, j) => { if (j === near) p.removeAttribute('inert'); else p.setAttribute('inert', ''); p.setAttribute('aria-hidden', j === near ? 'false' : 'true'); });
+  fitHeight(x);
+}
+function fitHeight(x) { // the viewport is as tall as the panel(s) on screen, so short tabs don't leave empty scroll
+  const panels = document.querySelectorAll('.panel');
+  const h = Math.max(panels[Math.floor(x)].offsetHeight, panels[Math.min(TABS.n - 1, Math.ceil(x))].offsetHeight);
+  document.querySelector('.viewport').style.height = h + 'px';
+}
+function showTab(i) {
+  const changed = i !== TABS.i;
+  TABS.i = Math.max(0, Math.min(TABS.n - 1, i));
+  tabLayout(TABS.i);
+  const top = $('track').getBoundingClientRect().top + window.scrollY - document.querySelector('header').offsetHeight - 8;
+  if (changed && window.scrollY > top) window.scrollTo({ top: Math.max(0, top), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+(function initTabs() {
+  const bar = $('tabs');
+  let drag = null, raf = 0, pendingX = null;
+  const toIndex = clientX => {
+    const r = bar.getBoundingClientRect(), seg = (r.width - TAB_PAD * 2) / TABS.n;
+    return Math.max(0, Math.min(TABS.n - 1, (clientX - r.left - TAB_PAD) / seg - 0.5));
+  };
+  const paint = () => { raf = 0; if (pendingX !== null) tabLayout(toIndex(pendingX)); };
+  bar.addEventListener('pointerdown', e => {
+    drag = { x0: e.clientX, moved: false, id: e.pointerId, lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+    bar.setPointerCapture(e.pointerId);
+    bar.classList.add('pressing');
+  });
+  bar.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dt = e.timeStamp - drag.lastT;
+    if (dt > 0) drag.v = 0.8 * ((e.clientX - drag.lastX) / dt) + 0.2 * drag.v; // px per ms, smoothed
+    drag.lastX = e.clientX; drag.lastT = e.timeStamp;
+    if (!drag.moved && Math.abs(e.clientX - drag.x0) < 6) return;
+    if (!drag.moved) { drag.moved = true; document.body.classList.add('dragging'); }
+    pendingX = e.clientX;
+    if (!raf) raf = requestAnimationFrame(paint); // one layout per frame keeps the drag smooth
+  });
+  const end = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { moved, v } = drag; drag = null; pendingX = null;
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    bar.classList.remove('pressing');
+    document.body.classList.remove('dragging');
+    let target = toIndex(e.clientX);
+    if (moved && Math.abs(v) > 0.3) target = v > 0 ? Math.ceil(target) : Math.floor(target); // a quick flick carries to the next tab
+    showTab(Math.round(target));
+  };
+  bar.addEventListener('pointerup', end);
+  bar.addEventListener('pointercancel', e => { if (drag) { drag = null; bar.classList.remove('pressing'); document.body.classList.remove('dragging'); showTab(TABS.i); } });
+  bar.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') showTab(TABS.i + 1); else if (e.key === 'ArrowLeft') showTab(TABS.i - 1); else return;
+    bar.querySelectorAll('button')[TABS.i].focus();
+  });
+  bar.querySelectorAll('button').forEach(b => b.addEventListener('click', e => { if (e.detail === 0) showTab(+b.dataset.i); }));
+  if ('ResizeObserver' in window) new ResizeObserver(() => fitHeight(TABS.i)).observe($('track'));
+  document.querySelectorAll('.panel').forEach(p => new MutationObserver(() => fitHeight(TABS.i)).observe(p, { childList: true, subtree: true }));
+  window.addEventListener('resize', () => tabLayout(TABS.i));
+  tabLayout(0);
+  if (document.fonts) document.fonts.ready.then(() => tabLayout(TABS.i));
+})();
+
+load();
+</script>
+</body>
+</html>
