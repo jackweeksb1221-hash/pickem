@@ -157,7 +157,7 @@ function tally(games, picks, results, names, into = {}, includeLive = false) {
   }
   return into;
 }
-// Hand-entered results for weeks that were played before the site existed
+// Hand-entered results for a week. When a week has these, they REPLACE the system's results for that week (see week.js).
 function addManual(manual, into, names) {
   for (const [k, m] of Object.entries(manual || {})) {
     if (!names[k]) continue;
@@ -171,6 +171,10 @@ function addManual(manual, into, names) {
 }
 const sortRows = o => Object.values(o).sort((a, b) =>
   b.points - a.points || b.correct - a.correct || a.name.localeCompare(b.name));
+// Season leaderboard: win % (right / total picks graded), then points, then most right. No picks yet = bottom.
+const pct = r => (r.correct + r.wrong) ? r.correct / (r.correct + r.wrong) : -1;
+const sortByPct = o => Object.values(o).map(r => ({ ...r, pct: (r.correct + r.wrong) ? r.correct / (r.correct + r.wrong) : null }))
+  .sort((a, b) => pct(b) - pct(a) || b.points - a.points || b.correct - a.correct || a.name.localeCompare(b.name));
 
 // ---------- login ----------
 function hashPin(pin, salt) { return crypto.scryptSync(String(pin), salt, 32).toString('hex'); }
@@ -187,5 +191,5 @@ function whoAmI(req) {
 
 module.exports = {
   crypto, redis, pipe, parseHash, currentWeek, weekRange, fetchLines, getGames,
-  gradeWeeks, gradePick, tally, addManual, sortRows, hashPin, sign, whoAmI,
+  gradeWeeks, gradePick, tally, addManual, sortRows, sortByPct, hashPin, sign, whoAmI,
 };
