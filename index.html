@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pick'em League</title>
+<title>Spread Em' League</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -69,7 +69,7 @@
 </head>
 <body>
 <header><div class="in">
-  <div><h1>Pick'em</h1><div id="dates"></div></div>
+  <div><h1>Spread Em'</h1><div id="dates"></div></div>
   <div class="weeknav"><button onclick="go(-1)" aria-label="Previous week">‹</button><b id="wk">Week</b><button onclick="go(1)" aria-label="Next week">›</button></div>
 </div></header>
 <main>
@@ -135,7 +135,7 @@ function render() {
   $('dates').textContent = fmt(D.range[0]) + ' – ' + fmt(Date.parse(D.range[1]) - 1) + (D.week === D.currentWeek ? ' (this week)' : '');
   renderAuth(); renderPicks();
   renderWeekBoard();
-  $('season').innerHTML = board(D.season);
+  $('season').innerHTML = seasonBoard(D.season);
   renderGrid(); renderMoney();
 }
 
@@ -220,7 +220,7 @@ function renderWeekBoard() {
       <td>${r.correct}–${r.wrong}</td><td class="num">${r.points}</td>${D.hasLive ? `<td class="num live">${r.live}</td>` : ''}</tr>`;
     if (openPlayer === r.key) h += `<tr><td colspan="${D.hasLive ? 5 : 4}" style="white-space:normal;background:#f8fafc">${playerDetail(r.key)}</td></tr>`;
   });
-  $('weekboard').innerHTML = h + `</table><div class="mute" style="margin-top:6px">Tap a player to see their picks.${D.hasLive ? ' Live = points if games in progress ended right now.' : ''}</div>`;
+  $('weekboard').innerHTML = h + `</table><div class="mute" style="margin-top:6px">${D.manualWeek ? 'Results for this week were entered by the admin and replace the site\'s own scoring. ' : ''}Tap a player to see their picks.${D.hasLive ? ' Live = points if games in progress ended right now.' : ''}</div>`;
 }
 function togglePlayer(k) { openPlayer = openPlayer === k ? null : k; renderWeekBoard(); }
 function playerDetail(k) {
@@ -242,6 +242,14 @@ function playerDetail(k) {
   return h + '</table>';
 }
 
+// Season leaderboard: ranked by win % (right / total picks), points shown alongside
+const pctText = p => p == null ? '–' : (p * 100).toFixed(1) + '%';
+function seasonBoard(rows) {
+  if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
+  return `<div class="scroll"><table><tr><th>#</th><th>Player</th><th>Win %</th><th>Right–wrong</th><th>Points</th></tr>` +
+    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${pctText(r.pct)}</td><td>${r.correct}–${r.wrong}</td><td class="mute">${r.points}</td></tr>`).join('') +
+    '</table></div><div class="mute" style="margin-top:6px">Ranked by win % (right ÷ total picks). Ties go to points.</div>';
+}
 function board(rows) {
   if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
   return `<table><tr><th>#</th><th>Player</th><th>Right–wrong</th><th>Points</th></tr>` +
@@ -416,7 +424,7 @@ function manualForm(j) {
   const ps = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]));
   if (!ps.length) return '<div class="mute">No players yet.</div>';
   const m = j.manual || {};
-  let h = `<div class="mute" style="margin-bottom:8px">Type points, right and wrong for each player. These add to the week and season totals. Leave a player blank for zero.</div>
+  let h = `<div class="mute" style="margin-bottom:8px">Type points, right and wrong for each player. Saving replaces everything the site scored this week, for the week and season totals. Leave a player blank for zero. Save with every box empty to go back to the site's own scoring.</div>
     <div class="scroll"><table><tr><th>Player</th><th>Points</th><th>Right</th><th>Wrong</th></tr>`;
   for (const [k, n] of ps) {
     const v = m[k] || {};
