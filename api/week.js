@@ -15,6 +15,7 @@ module.exports = async (req, res) => {
     const legacy = !!locked && all.every(g => g.lineLocked === undefined);
     const games = all.filter(g => g.lineLocked || legacy);
     const manual = manualRaw ? JSON.parse(manualRaw) : {};
+    const isManual = Object.keys(manual).length > 0;
     const windowState = win || 'notopen';
     const results = resultsRaw ? JSON.parse(resultsRaw) : {};
 
@@ -38,21 +39,28 @@ module.exports = async (req, res) => {
     const season = {};
     L.tally([], {}, {}, names, season);
     for (let i = 0; i < out.length; i += 4) {
-      L.tally(JSON.parse(out[i] || '[]'), L.parseHash(out[i + 1]), JSON.parse(out[i + 2] || '{}'), names, season);
-      L.addManual(JSON.parse(out[i + 3] || '{}'), season, names);
+      // A week with hand-entered results uses ONLY those numbers; the system's graded picks for that week are ignored
+      const wkManual = JSON.parse(out[i + 3] || '{}');
+      if (Object.keys(wkManual).length) L.addManual(wkManual, season, names);
+      else L.tally(JSON.parse(out[i] || '[]'), L.parseHash(out[i + 1]), JSON.parse(out[i + 2] || '{}'), names, season);
     }
 
     res.json({
       week: n, currentWeek: cur, locked: games.length > 0, lockedGames: games.length, totalGames: all.length, window: windowState, range: L.weekRange(n),
       me: names[me] ? me : null, myName: names[me] || null,
       games, results, picks: visible, players: names,
+      manualWeek: isManual,
       weekStandings: (() => {
-        const live = L.addManual(manual, L.tally(games, picks, results, names, {}, true), names);
-        const off = L.addManual(manual, L.tally(games, picks, results, names), names);
+        if (isManual) { // hand-entered results replace the system's results for this week
+          const off = L.addManual(manual, L.tally([], {}, {}, names), names);
+          return L.sortRows(off).map(r => ({ ...r, live: r.points }));
+        }
+        const live = L.tally(games, picks, results, names, {}, true);
+        const off = L.tally(games, picks, results, names);
         return L.sortRows(off).map(r => ({ ...r, live: live[r.key].points }));
       })(),
-      hasLive: Object.values(results).some(r => r.final === false),
-      season: L.sortRows(season),
+      hasLive: !isManual && Object.values(results).some(r => r.final === false),
+      season: L.sortByPct(season),
       debts: debtsRaw ? JSON.parse(debtsRaw) : [],
       venmo: L.parseHash(venmoRaw),
     });
@@ -60,3 +68,4 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 };
+
