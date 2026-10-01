@@ -68,6 +68,21 @@
   .danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); font-weight: 600; }
   .sm { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
 
+  /* ---------- press feedback for action buttons (save, log in, reset, apply, pay) ---------- */
+  .go, .danger, .pay { position: relative; overflow: visible;
+       transition: transform .32s var(--bounce), filter .25s var(--ease), background-color .25s var(--ease); }
+  .save { position: sticky; }
+  .go.tap, .danger.tap, .pay.tap { transform: scale(.94); filter: brightness(.82); transition-duration: .08s; }
+  .go::after, .danger::after, .pay::after { content: ''; position: absolute; inset: 0; border-radius: inherit;
+       pointer-events: none; opacity: 0; box-shadow: 0 0 0 0 var(--o2); }
+  .danger::after { box-shadow: 0 0 0 0 var(--bad); }
+  .pay::after { box-shadow: 0 0 0 0 var(--win); }
+  .go.ring::after, .danger.ring::after, .pay.ring::after { animation: ring .55s var(--ease); }
+  @keyframes ring { 0% { opacity: .75; box-shadow: 0 0 0 0 currentColor; }
+                    100% { opacity: 0; box-shadow: 0 0 0 12px currentColor; } }
+  .go::after { color: var(--o2); } .danger::after { color: var(--bad); } .pay::after { color: var(--win); }
+  .go:disabled::after, .danger:disabled::after { display: none; }
+
   /* ---------- games ---------- */
   .game { padding: 16px 0; border-top: 1px solid var(--line); }
   .game:first-of-type { border-top: 0; }
@@ -102,6 +117,12 @@
   .paid td { color: var(--dim); text-decoration: line-through; }
   .paid td.keep { text-decoration: none; }
   a.venmo { color: var(--win); font-weight: 600; text-decoration: none; font-size: 13px; }
+  .owe { background: var(--soft); border: 1px solid var(--line); border-radius: 18px; padding: 14px 14px 6px; margin-bottom: 16px; }
+  .owe h2 { font-size: 20px; margin-bottom: 6px; }
+  .owe-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .owe-row:first-of-type { border-top: 0; }
+  a.pay { display: inline-block; background: var(--win); color: var(--ink); font-weight: 700; font-size: 15px;
+          text-decoration: none; padding: 11px 16px; border-radius: 999px; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
 
   /* ---------- who-picked-what: table on wide screens, stacked blocks on phones ---------- */
   .grid-wide { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -166,6 +187,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .panel, .thumb, #msg, .tabs button, .viewport { transition-duration: 0s !important; }
+    .go::after, .danger::after, .pay::after { animation: none !important; }
   }
 </style>
 </head>
@@ -414,6 +436,20 @@ function renderGrid() {
 
 // ---------- Money board ----------
 const usd = x => '$' + Number(x).toFixed(2);
+// Opens the Venmo app (or venmo.com) on a payment to that person, amount and note filled in
+const payLink = (handle, amount, wk) => 'https://venmo.com/' + encodeURIComponent(handle) +
+  '?txn=pay&amount=' + Number(amount).toFixed(2) + '&note=' + encodeURIComponent('Fantasy Week ' + wk);
+function myDebts() {
+  if (!D.me) return '';
+  const mine = (D.debts || []).filter(d => !d.paid && d.from === D.me).sort((a, b) => a.week - b.week);
+  if (!mine.length) return '';
+  return `<div class="owe"><h2>You owe</h2>` + mine.map(d => {
+    const who = esc(D.players[d.to] || d.to), h = (D.venmo || {})[d.to];
+    return `<div class="owe-row"><div><b>${who}</b><div class="mute">Week ${d.week} · ${usd(d.amount)}</div></div>` +
+      (h ? `<a class="pay" href="${payLink(h, d.amount, d.week)}" target="_blank" rel="noopener">Pay ${usd(d.amount)}</a>`
+         : `<span class="mute" style="font-size:12px">No Venmo on file</span>`) + '</div>';
+  }).join('') + '</div>';
+}
 const venmo = k => (D.venmo || {})[k] ? `<a class="venmo" href="https://venmo.com/u/${encodeURIComponent(D.venmo[k])}" target="_blank" rel="noopener">@${esc(D.venmo[k])}</a>` : '';
 function venmoList() {
   const ps = Object.entries(D.players).filter(([k]) => (D.venmo || {})[k]).sort((a, b) => a[1].localeCompare(b[1]));
@@ -423,13 +459,14 @@ function venmoList() {
 function renderMoney() {
   const list = (D.debts || []).slice().sort((a, b) => a.paid - b.paid || b.week - a.week);
   if (!list.length) { $('money').innerHTML = '<div class="mute">Nothing owed yet.</div>' + venmoList(); return; }
+  let mine = myDebts();
   const nm = k => esc(D.players[k] || k);
   const bal = {};
   for (const d of list) if (!d.paid) { bal[d.from] = (bal[d.from] || 0) - d.amount; bal[d.to] = (bal[d.to] || 0) + d.amount; }
   const people = Object.entries(bal).filter(([, v]) => Math.abs(v) > 0.001).sort((a, b) => a[1] - b[1]);
-  let h = people.length ? `<table style="margin-bottom:14px"><tr><th>Player</th><th>Still owes / is owed</th></tr>` +
+  let h = mine + (people.length ? `<table style="margin-bottom:14px"><tr><th>Player</th><th>Still owes / is owed</th></tr>` +
     people.map(([k, v]) => `<tr><td>${nm(k)}</td><td class="${v < 0 ? 'loss' : 'win'}">${v < 0 ? 'Owes ' + usd(-v) : 'Is owed ' + usd(v) + ' ' + venmo(k)}</td></tr>`).join('') + '</table>'
-    : '<div class="win" style="margin-bottom:10px">Everyone is paid up.</div>';
+    : '<div class="win" style="margin-bottom:10px">Everyone is paid up.</div>');
   h += `<table><tr><th>Wk</th><th>Who owes</th><th>To</th><th>Amount</th><th>Status</th>${isAdmin ? '<th></th>' : ''}</tr>`;
   for (const d of list) {
     h += `<tr class="${d.paid ? 'paid' : ''}"><td>${d.week}</td><td>${nm(d.from)}</td><td>${nm(d.to)}${d.paid ? '' : ' ' + venmo(d.to)}</td><td>${usd(d.amount)}</td>
@@ -678,6 +715,20 @@ function showTab(i) {
   window.addEventListener('resize', () => tabLayout(TABS.i));
   tabLayout(0);
   if (document.fonts) document.fonts.ready.then(() => tabLayout(TABS.i));
+})();
+
+// Press feedback: buttons dip while held, then a soft ring spreads out on release
+(function () {
+  const SEL = '.go, .danger, .pay';
+  const off = () => document.querySelectorAll('.tap').forEach(b => b.classList.remove('tap'));
+  document.addEventListener('pointerdown', e => {
+    const b = e.target.closest(SEL); if (!b || b.disabled) return;
+    b.classList.add('tap');
+    b.classList.remove('ring'); void b.offsetWidth; b.classList.add('ring');
+    if (navigator.vibrate) navigator.vibrate(8);
+  }, { passive: true });
+  ['pointerup', 'pointercancel', 'dragstart'].forEach(t => document.addEventListener(t, () => setTimeout(off, 90), { passive: true }));
+  document.addEventListener('animationend', e => { if (e.animationName === 'ring') e.target.classList.remove('ring'); });
 })();
 
 load();
