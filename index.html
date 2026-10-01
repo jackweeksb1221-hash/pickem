@@ -103,6 +103,28 @@
   .paid td.keep { text-decoration: none; }
   a.venmo { color: var(--win); font-weight: 600; text-decoration: none; font-size: 13px; }
 
+  /* ---------- who-picked-what: table on wide screens, stacked blocks on phones ---------- */
+  .grid-wide { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .grid-narrow { display: none; }
+  .gcard { padding: 12px 0; border-top: 1px solid var(--line); }
+  .gcard:first-child { border-top: 0; padding-top: 2px; }
+  .ghead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .gteams { font: 700 18px/1.2 var(--serif); color: var(--text); }
+  .gcount { font-size: 12px; font-weight: 700; color: var(--dim); white-space: nowrap; }
+  .gcount.all { color: var(--win); }
+  .gpicks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .gp { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0;
+        background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 7px 10px; font-size: 13px; }
+  .gp.none { background: transparent; border-style: dashed; }
+  .gn { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .gv { white-space: nowrap; flex-shrink: 0; }
+  .gp.none .gv { color: var(--dim); }
+  @media (max-width: 600px) {
+    #grid.scroll { overflow-x: visible; }
+    .grid-wide { display: none; }
+    .grid-narrow { display: block; }
+  }
+
   /* ---------- admin ---------- */
   #admin h2:first-child::before { content: 'Commissioner'; display: block; font: 600 11px var(--sans);
        letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
@@ -358,22 +380,36 @@ function board(rows) {
 function renderGrid() {
   const ps = Object.entries(D.players).sort((a, b) => a[1].localeCompare(b[1]));
   if (!D.games.length || !ps.length) { $('grid').innerHTML = '<div class="mute">Nothing to show yet.</div>'; return; }
-  let h = `<table><tr><th>Game</th>${ps.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr>`;
+  const cell = (g, k) => {
+    const p = (D.picks[k] || {})[g.id];
+    if (!p) return { c: '–', cls: 'mute', picked: false };
+    if (p.hidden) return { c: '🔒', cls: '', picked: true };
+    let cls = '';
+    const res = D.results[g.id];
+    if (res) cls = (grade(g, res, p).win ? 'win' : 'loss') + (res.final === false ? ' live' : '');
+    return { c: label(g, p.pick) + (p.mult > 1 ? ` <b>${p.mult}x</b>` : ''), cls, picked: true };
+  };
+  // wide screens: one table, games down the side, players across the top
+  let h = `<div class="grid-wide"><table><tr><th>Game</th>${ps.map(([, n]) => `<th>${esc(n)}</th>`).join('')}</tr>`;
   for (const g of D.games) {
     h += `<tr><td>${short(g.away)} at ${short(g.home)}</td>`;
-    for (const [k] of ps) {
-      const p = (D.picks[k] || {})[g.id]; let c = '–', cls = 'mute';
-      if (p && p.hidden) c = '🔒';
-      else if (p) {
-        c = label(g, p.pick) + (p.mult > 1 ? ` <b>${p.mult}x</b>` : ''); cls = '';
-        const res = D.results[g.id];
-        if (res) cls = (grade(g, res, p).win ? 'win' : 'loss') + (res.final === false ? ' live' : '');
-      }
-      h += `<td class="${cls}">${c}</td>`;
-    }
+    for (const [k] of ps) { const x = cell(g, k); h += `<td class="${x.cls}">${x.c}</td>`; }
     h += '</tr>';
   }
-  $('grid').innerHTML = h + '</table><div class="mute" style="margin-top:6px">🔒 means they picked; it shows when picks close or at kickoff.</div>';
+  h += '</table></div>';
+  // phones: one block per game, players wrap two to a row so nothing scrolls sideways
+  h += '<div class="grid-narrow">';
+  for (const g of D.games) {
+    const cells = ps.map(([k, n]) => [n, cell(g, k)]);
+    const n = cells.filter(([, x]) => x.picked).length;
+    h += `<div class="gcard"><div class="ghead"><span class="gteams">${short(g.away)} at ${short(g.home)}</span>` +
+         `<span class="gcount${n === ps.length ? ' all' : ''}">${n}/${ps.length} in</span></div><div class="gpicks">` +
+         cells.map(([nm, x]) => `<div class="gp${x.picked ? '' : ' none'}"><span class="gn">${esc(nm)}</span>` +
+           `<span class="gv ${x.cls}">${x.c === '🔒' ? '🔒 In' : x.picked ? x.c : 'No pick'}</span></div>`).join('') +
+         '</div></div>';
+  }
+  h += '</div>';
+  $('grid').innerHTML = h + '<div class="mute" style="margin-top:6px">🔒 means they picked; it shows when picks close or at kickoff.</div>';
 }
 
 // ---------- Money board ----------
