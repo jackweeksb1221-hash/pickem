@@ -35,6 +35,12 @@
   .weeknav button { width: 38px; height: 38px; padding: 0; border-radius: 999px; background: var(--soft);
                     border: 1px solid var(--line); color: var(--o2); font-size: 20px; line-height: 1; }
 
+  /* chance-of-winning cell */
+  td.odds { min-width: 52px; width: 52px; padding-left: 4px; }
+  td.odds b { font: 700 15px/1 var(--serif); color: var(--o2); }
+  td.odds .bar { display: block; height: 3px; margin-top: 5px; border-radius: 2px; background: var(--line); }
+  td.odds .bar i { display: block; height: 100%; border-radius: 2px; background: var(--win); }
+
   /* ---------- panels ---------- */
   main { max-width: 720px; margin: 0 auto; padding: 6px 16px 0; }
   .viewport { overflow: clip; box-sizing: content-box; padding-block: 26px; margin: -26px -16px;
@@ -354,16 +360,93 @@ async function save() {
 
 // Weekly board: official points (finals only) + live points (if games in progress ended now). Tap a player for details.
 let openPlayer = null;
+/* ---------- chance of winning the week ----------
+   Monte Carlo over the games still undecided. Each one carries two independent
+   coin flips: who covers the spread, and over/under. The flips happen once per
+   trial and are then applied to everybody, so two players on the same side of a
+   game move together — that correlation is what makes the number mean anything.
+   A pick against a spread with the half-point is a 50/50 by construction, so
+   there is nothing cleverer to model. */
+const SIMS = 8000;
+function winChances() {
+  if (!D || D.manualWeek) return null;
+  const games = D.games || [], rows = D.weekStandings || [], res = D.results || {};
+  if (!rows.length) return null;
+
+  const slotOf = {};
+  let openCount = 0;
+  for (const g of games) {
+    const r = res[g.id];
+    if (!r || r.final === false) slotOf[g.id] = openCount++;   // live games count as undecided
+  }
+  if (!openCount) return null;                                  // week is settled
+
+  const P = rows.map(r => {
+    const picks = D.picks[r.key] || {};
+    const open = [], blind = [];
+    for (const g of games) {
+      const slot = slotOf[g.id];
+      if (slot === undefined) continue;
+      const p = picks[g.id];
+      if (!p) continue;                                         // no pick scores nothing
+      if (p.hidden) blind.push(slot); else open.push({ slot, pick: p.pick, mult: p.mult || 1 });
+    }
+    const spent = new Set();
+    for (const p of Object.values(picks)) if (p && !p.hidden && p.mult > 1) spent.add(p.mult);
+    return { key: r.key, base: Number(r.points) || 0, open, blind, free: [2, 3].filter(m => !spent.has(m)) };
+  });
+
+  const n = P.length, wins = new Float64Array(n), score = new Float64Array(n);
+  const cover = new Uint8Array(openCount), over = new Uint8Array(openCount);
+  const pts = (w, m) => w ? m : (m === 1 ? 0 : m === 2 ? -1 : -2);
+
+  for (let s = 0; s < SIMS; s++) {
+    for (let i = 0; i < openCount; i++) { cover[i] = Math.random() < .5 ? 1 : 0; over[i] = Math.random() < .5 ? 1 : 0; }
+    let best = -Infinity;
+    for (let a = 0; a < n; a++) {
+      const p = P[a];
+      let t = p.base;
+      for (let k = 0; k < p.open.length; k++) {
+        const q = p.open[k];
+        const w = q.pick === 'home' ? cover[q.slot] === 1
+                : q.pick === 'away' ? cover[q.slot] === 0
+                : q.pick === 'over' ? over[q.slot] === 1 : over[q.slot] === 0;
+        t += pts(w, q.mult);
+      }
+      if (p.blind.length) {              // hidden picks: side and multiplier both unknown
+        const m = new Array(p.blind.length).fill(1);
+        for (const f of p.free) { const i = Math.floor(Math.random() * m.length); if (m[i] === 1) m[i] = f; }
+        for (let k = 0; k < m.length; k++) t += pts(Math.random() < .5, m[k]);
+      }
+      score[a] = t;
+      if (t > best) best = t;
+    }
+    let tied = 0;
+    for (let a = 0; a < n; a++) if (score[a] === best) tied++;
+    for (let a = 0; a < n; a++) if (score[a] === best) wins[a] += 1 / tied;   // a tie splits the win
+  }
+  const out = {};
+  for (let a = 0; a < n; a++) out[P[a].key] = wins[a] / SIMS;
+  return out;
+}
+const chanceText = v => v == null ? '–'
+  : v >= .995 ? '>99%' : (v > 0 && v < .005) ? '<1%' : Math.round(v * 100) + '%';
+
 function renderWeekBoard() {
   const rows = D.weekStandings;
   if (!rows.length) { $('weekboard').innerHTML = '<div class="mute">No players yet. Share the link and have people join.</div>'; return; }
-  let h = `<table><tr><th>#</th><th>Player</th><th>Right–wrong</th><th>Points</th>${D.hasLive ? '<th>Live</th>' : ''}</tr>`;
+  let odds = null;
+  try { odds = winChances(); } catch (e) { odds = null; }   // odds are a nicety; never let them break the board
+  const cols = 4 + (D.hasLive ? 1 : 0) + (odds ? 1 : 0);
+  let h = `<div class="scroll"><table><tr><th>#</th><th>Player</th><th>${odds ? 'W–L' : 'Right–wrong'}</th><th>Pts</th>${D.hasLive ? '<th>Live</th>' : ''}${odds ? '<th>Odds</th>' : ''}</tr>`;
   rows.forEach((r, i) => {
     h += `<tr class="pick-row ${openPlayer === r.key ? 'sel' : ''}" onclick="togglePlayer('${r.key}')"><td>${i + 1}</td><td>${esc(r.name)} ›</td>
-      <td>${r.correct}–${r.wrong}</td><td class="num">${r.points}</td>${D.hasLive ? `<td class="num live">${r.live}</td>` : ''}</tr>`;
-    if (openPlayer === r.key) h += `<tr><td class="detail" colspan="${D.hasLive ? 5 : 4}"><div class="detail-wrap">${playerDetail(r.key)}</div></td></tr>`;
+      <td>${r.correct}–${r.wrong}</td><td class="num">${r.points}</td>${D.hasLive ? `<td class="num live">${r.live}</td>` : ''}${
+        odds ? `<td class="odds"><b>${chanceText(odds[r.key])}</b><span class="bar"><i style="width:${Math.round((odds[r.key] || 0) * 100)}%"></i></span></td>` : ''}</tr>`;
+    if (openPlayer === r.key) h += `<tr><td class="detail" colspan="${cols}"><div class="detail-wrap">${playerDetail(r.key)}</div></td></tr>`;
   });
-  $('weekboard').innerHTML = h + `</table><div class="mute" style="margin-top:6px">${D.manualWeek ? 'Results for this week were entered by the admin and replace the site\'s own scoring. ' : ''}Tap a player to see their picks.${D.hasLive ? ' Live = points if games in progress ended right now.' : ''}</div>`;
+  $('weekboard').innerHTML = h + `</table></div><div class="mute" style="margin-top:6px">${D.manualWeek ? 'Results for this week were entered by the admin and replace the site\'s own scoring. ' : ''}Tap a player to see their picks.${D.hasLive ? ' Live = points if games in progress ended right now.' : ''}${
+    odds ? ' Odds = how often they win the week across 8,000 simulated finishes, every undecided game a coin flip. Ties split the win; hidden picks are treated as unknown.' : ''}</div>`;
 }
 function togglePlayer(k) { openPlayer = openPlayer === k ? null : k; renderWeekBoard(); }
 function playerDetail(k) {
