@@ -361,20 +361,23 @@ async function save() {
 // Weekly board: official points (finals only) + live points (if games in progress ended now). Tap a player for details.
 let openPlayer = null;
 /* ---------- expected points ----------
-   Deterministic projection: actual points from decided games, plus 0.5 for
-   every game still undecided (a coin flip at 50/50 — every 1x/2x/3x pick has
-   an expected value of exactly 0.5: (1+0)/2, (2-1)/2, (3-2)/2). */
+   Deterministic projection for the whole week: actual points from decided
+   games, plus 0.5 for every game still remaining (a coin flip at 50/50 —
+   every 1x/2x/3x pick has an expected value of exactly 0.5: (1+0)/2,
+   (2-1)/2, (3-2)/2). */
 function expectedPoints() {
   if (!D || D.manualWeek) return null;
   const games = D.games || [], rows = D.weekStandings || [], res = D.results || {};
-  if (!rows.length || !games.length) return null;
-  let undecided = 0;
+  if (!rows.length) return null;
+  const total = D.totalGames || games.length;
+  let decided = 0;
   for (const g of games) {
     const r = res[g.id];
-    if (!r || r.final === false) undecided++;   // live games count as undecided
+    if (r && r.final !== false) decided++;
   }
+  const remaining = Math.max(0, total - decided);
   const out = {};
-  for (const r of rows) out[r.key] = (Number(r.points) || 0) + 0.5 * undecided;
+  for (const r of rows) out[r.key] = (Number(r.points) || 0) + 0.5 * remaining;
   return out;
 }
 const expText = v => v == null ? '–' : String(Math.round(v * 10) / 10);
@@ -394,7 +397,7 @@ function renderWeekBoard() {
     if (openPlayer === r.key) h += `<tr><td class="detail" colspan="${cols}"><div class="detail-wrap">${playerDetail(r.key)}</div></td></tr>`;
   });
   $('weekboard').innerHTML = h + `</table></div><div class="mute" style="margin-top:6px">${D.manualWeek ? 'Results for this week were entered by the admin and replace the site\'s own scoring. ' : ''}Tap a player to see their picks.${D.hasLive ? ' Live = points if games in progress ended right now.' : ''}${
-    odds ? ' Exp = points from decided games + 0.5 for each game still undecided.' : ''}</div>`;
+    odds ? ' Exp = points from decided games + 0.5 for each game remaining this week.' : ''}</div>`;
 }
 function togglePlayer(k) { openPlayer = openPlayer === k ? null : k; renderWeekBoard(); }
 function playerDetail(k) {
