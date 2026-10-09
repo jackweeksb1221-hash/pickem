@@ -49,6 +49,7 @@ module.exports = async (req, res) => {
       week: n, currentWeek: cur, locked: games.length > 0, lockedGames: games.length, totalGames: all.length, window: windowState, range: L.weekRange(n),
       me: names[me] ? me : null, myName: names[me] || null,
       games, results, picks: visible, players: names,
+      unlocked: legacy ? [] : all.filter(g => !g.lineLocked).map(g => g.id),
       manualWeek: isManual,
       weekStandings: (() => {
         if (isManual) { // hand-entered results replace the system's results for this week
