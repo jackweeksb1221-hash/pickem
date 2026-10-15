@@ -38,18 +38,22 @@ module.exports = async (req, res) => {
     const out = await L.pipe(cmds);
     const season = {};
     L.tally([], {}, {}, names, season);
-    // Weekly winners: $10 per player in the pot each week; tied winners split it.
-    const pot = 10 * Math.max(1, Object.keys(names).length);
+    // Weekly winners: winners don't pay — the pot is $10 from every player who
+    // didn't win, split among the winners (win alone: $60, two-way tie: $25 each).
+    const playerCount = Math.max(1, Object.keys(names).length);
     const wins = {};
+    let decidedWeeks = 0;
     const awardWeek = rowsObj => {
       const rows = Object.values(rowsObj);
-      if (!rows.reduce((s, r) => s + r.correct + r.wrong, 0)) return;   // nobody picked: no winner
+      if (!rows.some(r => r.correct + r.wrong > 0 || r.points !== 0)) return;   // nobody picked: no winner, no pot
+      decidedWeeks++;
       const best = Math.max(...rows.map(r => r.points));
       const champs = rows.filter(r => r.points === best);
+      const share = 10 * (playerCount - champs.length) / champs.length;
       for (const c of champs) {
         wins[c.key] = wins[c.key] || { weeksWon: 0, money: 0 };
         wins[c.key].weeksWon += 1;
-        wins[c.key].money += pot / champs.length;
+        wins[c.key].money += share;
       }
     };
     for (let i = 0; i < out.length; i += 4) {
@@ -85,7 +89,11 @@ module.exports = async (req, res) => {
       hasLive: !isManual && Object.values(results).some(r => r.final === false),
       season: L.sortByPct(season),
       weeklyWins: Object.entries(names)
-        .map(([k, name]) => ({ key: k, name, weeksWon: (wins[k] || {}).weeksWon || 0, money: (wins[k] || {}).money || 0 }))
+        .map(([k, name]) => {
+          const w = wins[k] || { weeksWon: 0, money: 0 };
+          const money = Math.round(w.money * 100) / 100;
+          return { key: k, name, weeksWon: w.weeksWon, money, net: Math.round((money - 10 * (decidedWeeks - w.weeksWon)) * 100) / 100 };
+        })
         .sort((a, b) => b.weeksWon - a.weeksWon || b.money - a.money || a.name.localeCompare(b.name)),
       debts: debtsRaw ? JSON.parse(debtsRaw) : [],
       venmo: L.parseHash(venmoRaw),

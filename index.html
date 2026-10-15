@@ -521,13 +521,15 @@ function seasonBoard(rows) {
     rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${pctText(r.pct)}</td><td>${r.correct}–${r.wrong}</td><td class="mute">${r.points}</td></tr>`).join('') +
     '</table></div><div class="mute" style="margin-top:6px">Ranked by win % (right ÷ total picks). Ties go to points.</div>';
 }
-// Weekly winners: weeks each player has won and the money that paid ($10 per player per week, ties split the pot)
+// Weekly winners: weeks each player has won, what that paid, and net earnings.
+// Winners don't pay — the pot is $10 from every player who didn't win, split among the winners.
 const moneyText = v => '$' + (Number.isInteger(v) ? v : Number(v || 0).toFixed(2));
+const netText = v => (v > 0 ? '+$' : v < 0 ? '-$' : '$') + (Number.isInteger(Math.abs(v)) ? Math.abs(v) : Math.abs(v).toFixed(2));
 function weeklyWinsBoard(rows) {
   if (!rows || !rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
-  return `<div class="scroll"><table><tr><th>#</th><th>Player</th><th>Weeks won</th><th>Money won</th></tr>` +
-    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${r.weeksWon}</td><td class="num">${moneyText(r.money)}</td></tr>`).join('') +
-    '</table></div><div class="mute" style="margin-top:6px">A week counts once all its games are final. The winner takes the pot — $10 per player; tied winners split it.</div>';
+  return `<div class="scroll"><table><tr><th>#</th><th>Player</th><th>Weeks won</th><th>Money won</th><th>Net</th></tr>` +
+    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${r.weeksWon}</td><td class="num">${moneyText(r.money)}</td><td class="num">${netText(r.net)}</td></tr>`).join('') +
+    '</table></div><div class="mute" style="margin-top:6px">A week counts once all its games are final. Winners don\'t pay — the pot is $10 from every player who didn\'t win, split among the winners. Net subtracts $10 for each week you didn\'t win.</div>';
 }
 function board(rows) {
   if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
