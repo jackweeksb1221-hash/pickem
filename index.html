@@ -212,6 +212,7 @@
     <div class="panel" data-tab="standings">
       <section class="slip"><h2>This week</h2><div id="weekboard"></div></section>
       <section class="slip"><h2>Season standings</h2><div id="season"></div></section>
+      <section class="slip"><h2>Weekly wins</h2><div id="weeklywins"></div></section>
     </div>
     <div class="panel" data-tab="board">
       <section class="slip"><h2>Who picked what</h2><div class="scroll" id="grid"></div></section>
@@ -285,6 +286,7 @@ function render() {
   renderAuth(); renderPicks();
   renderWeekBoard();
   $('season').innerHTML = seasonBoard(D.season);
+  $('weeklywins').innerHTML = weeklyWinsBoard(D.weeklyWins);
   renderGrid(); renderMoney();
 }
 
@@ -518,6 +520,14 @@ function seasonBoard(rows) {
   return `<div class="scroll"><table><tr><th>#</th><th>Player</th><th>Win %</th><th>Right–wrong</th><th>Points</th></tr>` +
     rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${pctText(r.pct)}</td><td>${r.correct}–${r.wrong}</td><td class="mute">${r.points}</td></tr>`).join('') +
     '</table></div><div class="mute" style="margin-top:6px">Ranked by win % (right ÷ total picks). Ties go to points.</div>';
+}
+// Weekly winners: weeks each player has won and the money that paid ($10 per player per week, ties split the pot)
+const moneyText = v => '$' + (Number.isInteger(v) ? v : Number(v || 0).toFixed(2));
+function weeklyWinsBoard(rows) {
+  if (!rows || !rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';
+  return `<div class="scroll"><table><tr><th>#</th><th>Player</th><th>Weeks won</th><th>Money won</th></tr>` +
+    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${r.weeksWon}</td><td class="num">${moneyText(r.money)}</td></tr>`).join('') +
+    '</table></div><div class="mute" style="margin-top:6px">A week counts once all its games are final. The winner takes the pot — $10 per player; tied winners split it.</div>';
 }
 function board(rows) {
   if (!rows.length) return '<div class="mute">No players yet. Share the link and have people join.</div>';

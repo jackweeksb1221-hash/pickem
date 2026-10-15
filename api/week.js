@@ -38,11 +38,33 @@ module.exports = async (req, res) => {
     const out = await L.pipe(cmds);
     const season = {};
     L.tally([], {}, {}, names, season);
+    // Weekly winners: $10 per player in the pot each week; tied winners split it.
+    const pot = 10 * Math.max(1, Object.keys(names).length);
+    const wins = {};
+    const awardWeek = rowsObj => {
+      const rows = Object.values(rowsObj);
+      if (!rows.reduce((s, r) => s + r.correct + r.wrong, 0)) return;   // nobody picked: no winner
+      const best = Math.max(...rows.map(r => r.points));
+      const champs = rows.filter(r => r.points === best);
+      for (const c of champs) {
+        wins[c.key] = wins[c.key] || { weeksWon: 0, money: 0 };
+        wins[c.key].weeksWon += 1;
+        wins[c.key].money += pot / champs.length;
+      }
+    };
     for (let i = 0; i < out.length; i += 4) {
       // A week with hand-entered results uses ONLY those numbers; the system's graded picks for that week are ignored
       const wkManual = JSON.parse(out[i + 3] || '{}');
-      if (Object.keys(wkManual).length) L.addManual(wkManual, season, names);
-      else L.tally(JSON.parse(out[i] || '[]'), L.parseHash(out[i + 1]), JSON.parse(out[i + 2] || '{}'), names, season);
+      if (Object.keys(wkManual).length) {
+        L.addManual(wkManual, season, names);
+        awardWeek(L.addManual(wkManual, L.tally([], {}, {}, names), names));
+      } else {
+        const wkGames = JSON.parse(out[i] || '[]'), wkPicks = L.parseHash(out[i + 1]), wkResults = JSON.parse(out[i + 2] || '{}');
+        L.tally(wkGames, wkPicks, wkResults, names, season);
+        // A week only crowns a winner once every game in it is final
+        if (wkGames.length && wkGames.every(g => wkResults[g.id] && wkResults[g.id].final !== false))
+          awardWeek(L.tally(wkGames, wkPicks, wkResults, names));
+      }
     }
 
     res.json({
@@ -62,6 +84,9 @@ module.exports = async (req, res) => {
       })(),
       hasLive: !isManual && Object.values(results).some(r => r.final === false),
       season: L.sortByPct(season),
+      weeklyWins: Object.entries(names)
+        .map(([k, name]) => ({ key: k, name, weeksWon: (wins[k] || {}).weeksWon || 0, money: (wins[k] || {}).money || 0 }))
+        .sort((a, b) => b.weeksWon - a.weeksWon || b.money - a.money || a.name.localeCompare(b.name)),
       debts: debtsRaw ? JSON.parse(debtsRaw) : [],
       venmo: L.parseHash(venmoRaw),
     });
